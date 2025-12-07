@@ -77,7 +77,7 @@
 └── data/               # [Storage] 数据持久化层 (自动生成)
     ├── cards.db        # SQLite 数据文件
     └── .htaccess       # Apache/LS 安全规则文件
-🚀 快速部署指南
+## 🚀 快速部署指南
 1. 环境准备
 运行环境: PHP 7.4 - 8.2 (推荐 8.0，兼顾性能与兼容性)
 Web 服务器: Nginx / Apache / OpenLiteSpeed
@@ -125,7 +125,7 @@ Content-Type: application/json or application/x-www-form-urlencoded
     "msg": "卡密已过期 / 设备指纹不匹配",
     "data": null
 }
-⚠️ 运维安全最佳实践
+## ⚠️ 运维安全最佳实践
 后台入口隐蔽: 建议将 cards.php 重命名为随机字符文件（如 admin_sys_v2.php），降低被扫描爆破风险。
 HTTPS 全站加密: 生产环境必须启用 SSL 证书，防止卡密在网络传输层被中间人嗅探。
 冷备份策略: 由于采用单文件数据库架构，建议定期下载 /data/cards.db 至本地进行冷备份。
@@ -134,7 +134,7 @@ location ~ ^/data/.*\.(db|htaccess)$ {
     deny all;
     return 403;
 }
-🤝 社区与支持
+## 🤝 社区与支持
 官方文档: https://aegis.可爱.top/
 技术交流群: 562807728
 Copyright © 2026 GuYi Aegis Pro. All Rights Reserved.
