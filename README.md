@@ -168,13 +168,4 @@ location ~ ^/data/.*\.(db|htaccess)$ {
 }
 ```
 
----
-
-## 🤝 社区与支持
-
-- **官方文档**: [https://aegis.可爱.top/](https://aegis.可爱.top/)
-- **技术交流群**: 562807728
-
----
-
 Copyright © 2026 GuYi Aegis Pro. All Rights Reserved.
