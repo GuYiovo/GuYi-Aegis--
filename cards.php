@@ -49,7 +49,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['batch_export'])) {
     echo "卡密 | 类型 | 状态 | 到期时间 | 备注\r\n";
     echo str_repeat("-", 80) . "\r\n";
     foreach ($data as $row) {
-        $status = ($row['status'] == 1) ? ((strtotime($row['expire_time']) > time()) ? (empty($row['device_hash']) ? '待绑定' : '使用中') : '已过期') : '未激活';
+        // 状态显示逻辑更新：增加封禁判断
+        if ($row['status'] == 2) {
+            $status = '已封禁';
+        } elseif ($row['status'] == 1) {
+            $status = (strtotime($row['expire_time']) > time()) ? (empty($row['device_hash']) ? '待绑定' : '使用中') : '已过期';
+        } else {
+            $status = '未激活';
+        }
         $type = CARD_TYPES[$row['card_type']]['name'] ?? $row['card_type'];
         echo "{$row['card_code']} | {$type} | {$status} | {$row['expire_time']} | {$row['notes']}\r\n";
     }
@@ -179,6 +186,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $appList = $db->getApps();
         } catch (Exception $e) { $errorMsg = $e->getMessage(); }
     }
+    // 处理变量添加
+    elseif (isset($_POST['add_var'])) {
+        try {
+            $varAppId = intval($_POST['var_app_id']);
+            $varKey = trim($_POST['var_key']);
+            $varVal = trim($_POST['var_value']);
+            $varPub = isset($_POST['var_public']) ? 1 : 0;
+            if (empty($varKey)) throw new Exception("变量名不能为空");
+            $db->addAppVariable($varAppId, htmlspecialchars($varKey), htmlspecialchars($varVal), $varPub);
+            $msg = "变量「".htmlspecialchars($varKey)."」添加成功";
+        } catch (Exception $e) { $errorMsg = $e->getMessage(); }
+    }
+    // 处理变量删除
+    elseif (isset($_POST['del_var'])) {
+        $db->deleteAppVariable($_POST['var_id']);
+        $msg = "变量已删除";
+    }
     elseif (isset($_POST['batch_delete'])) {
         $count = $db->batchDeleteCards($_POST['ids'] ?? []);
         $msg = "已批量删除 {$count} 张卡密";
@@ -205,6 +229,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (isset($_POST['update_pwd'])) {
         $db->updateAdminPassword($_POST['new_pwd']);
         $msg = "管理员密码已更新";
+    } 
+    // --- 新增：卡密封禁/解封处理 ---
+    elseif (isset($_POST['ban_card'])) {
+        $db->updateCardStatus($_POST['id'], 2); // 2 = 封禁状态
+        $msg = "卡密已封禁";
+    } elseif (isset($_POST['unban_card'])) {
+        $db->updateCardStatus($_POST['id'], 1); // 尝试恢复为正常
+        $msg = "卡密已解除封禁";
     }
 }
 
@@ -219,7 +251,7 @@ $activeDevices = $db->getActiveDevices();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enterprise Admin Pro</title>
+    <title>GuYi Aegis Pro</title>
     <link rel="icon" href="backend/logo.png" type="image/png">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -276,12 +308,22 @@ $activeDevices = $db->getActiveDevices();
         .btn-primary { background: var(--primary); color: white; }
         .btn-danger { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
         .btn-warning { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
+        .btn-secondary { background: #e2e8f0; color: #475569; }
         .btn-icon { padding: 8px; }
         .form-control { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 16px; font-size: 14px; }
         .toast { position: fixed; bottom: 24px; right: 24px; background: #0f172a; color: white; padding: 12px 24px; border-radius: 8px; opacity: 0; transition: 0.3s; transform: translateY(20px); z-index: 100; font-size: 14px; }
         .toast.show { opacity: 1; transform: translateY(0); }
         .app-key-box { font-family: 'JetBrains Mono', monospace; background: #f1f5f9; padding: 8px 12px; border-radius: 6px; font-size: 12px; color: #475569; border: 1px solid #e2e8f0; word-break: break-all; display: flex; justify-content: space-between; align-items: center; }
         .app-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; background: #e0e7ff; color: #4338ca; font-size: 11px; font-weight: 600; margin-right: 8px; }
+        
+        /* 折叠面板样式 */
+        details.panel > summary { list-style: none; cursor: pointer; transition: 0.2s; user-select: none; }
+        details.panel > summary::-webkit-details-marker { display: none; }
+        details.panel > summary:hover { background: #f8fafc; }
+        details.panel[open] > summary { border-bottom: 1px solid var(--border); background: #fdfdfd; color: var(--primary); }
+        details.panel > summary::after { content: '+'; float: right; font-weight: bold; }
+        details.panel[open] > summary::after { content: '-'; }
+
         @media (max-width: 1024px) { .grid-4 { grid-template-columns: repeat(2, 1fr); } }
         @media (max-width: 768px) { aside { display: none; } .content { padding: 16px; } table { display: block; overflow-x: auto; white-space: nowrap; } }
         
@@ -337,7 +379,7 @@ $activeDevices = $db->getActiveDevices();
                             <span style="font-size: 11px; background: #3b82f6; color: white; padding: 2px 8px; border-radius: 10px; font-weight: 500;">NEW</span>
                         </div>
                         <div style="font-size: 14px; color: #475569; line-height: 1.6;">
-                            欢迎使用 <b>GuYi Aegis Pro</b> 企业级验证管理系统。当前系统版本已更新至 V6.0。<br>
+                            欢迎使用 <b>GuYi Aegis Pro</b> 企业级验证管理系统。当前系统版本已更新至 V7.0。<br>
                             <ul style="margin: 5px 0 0 0; padding-left: 20px;">
                                 <li>QQ群562807728</li>
                                 <li>作者156440000</li>
@@ -408,10 +450,17 @@ $activeDevices = $db->getActiveDevices();
             $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
             $currentScriptDir = dirname($_SERVER['SCRIPT_NAME']);
             $currentScriptDir = rtrim($currentScriptDir, '/'); // 移除末尾斜杠
-            // 拼接路径，假设 api.php 在 Verifyfile 目录下
             $apiUrl = $protocol . "://" . $_SERVER['HTTP_HOST'] . $currentScriptDir . "/Verifyfile/api.php";
             ?>
-            <div class="grid-4" style="grid-template-columns: 2fr 1fr; align-items: start;">
+
+            <!-- 顶部切换按钮 -->
+            <div style="margin-bottom: 20px; display: flex; gap: 10px;">
+                <button onclick="switchAppView('apps')" id="btn_apps" class="btn btn-primary">应用列表</button>
+                <button onclick="switchAppView('vars')" id="btn_vars" class="btn btn-secondary">变量管理</button>
+            </div>
+
+            <!-- 页面1：应用列表 -->
+            <div id="view_apps">
                 <div class="panel">
                     <div class="panel-head"><span class="panel-title">已接入应用列表</span></div>
                     <table>
@@ -429,49 +478,131 @@ $activeDevices = $db->getActiveDevices();
                                 </td>
                             </tr>
                             <?php endforeach; ?>
-                            <?php if(count($appList) <= 1): ?><tr><td colspan="5" style="text-align:center;padding:30px;color:#94a3b8;">暂无应用，请在右侧创建</td></tr><?php endif; ?>
+                            <?php if(count($appList) <= 1): ?><tr><td colspan="5" style="text-align:center;padding:30px;color:#94a3b8;">暂无应用，请在下方创建</td></tr><?php endif; ?>
                         </tbody>
                     </table>
                 </div>
-                
-                <!-- 右侧栏：包含 API 信息和创建表单 -->
-                <div style="display: flex; flex-direction: column; gap: 24px;">
-                    <!-- 新增：API 接口信息面板 -->
-                    <div class="panel">
-                        <div class="panel-head"><span class="panel-title">API 接口信息</span></div>
-                        <div style="padding:24px;">
-                            <label style="display:block;margin-bottom:8px;font-weight:600;font-size:13px;">接口地址 (URL)</label>
-                            <div class="app-key-box" style="margin-bottom:16px;">
-                                <span style="font-size:11px;"><?php echo $apiUrl; ?></span>
-                                <i class="fas fa-copy" style="cursor:pointer;color:#3b82f6;" onclick="copy('<?php echo $apiUrl; ?>')"></i>
-                            </div>
-                            <label style="display:block;margin-bottom:8px;font-weight:600;font-size:13px;">JSON 请求示例</label>
-                            <pre style="background:#f1f5f9; padding:10px; border-radius:6px; font-size:11px; font-family:'JetBrains Mono'; margin:0; border:1px solid #e2e8f0; color:#475569;">
+
+                <!-- API 信息 (折叠) -->
+                <details class="panel">
+                    <summary class="panel-head"><span class="panel-title">API 接口信息 (点击展开)</span></summary>
+                    <div style="padding:24px;">
+                        <label style="display:block;margin-bottom:8px;font-weight:600;font-size:13px;">接口地址 (URL)</label>
+                        <div class="app-key-box" style="margin-bottom:16px;">
+                            <span style="font-size:11px;"><?php echo $apiUrl; ?></span>
+                            <i class="fas fa-copy" style="cursor:pointer;color:#3b82f6;" onclick="copy('<?php echo $apiUrl; ?>')"></i>
+                        </div>
+                        <label style="display:block;margin-bottom:8px;font-weight:600;font-size:13px;">JSON 请求示例</label>
+                        <pre style="background:#f1f5f9; padding:10px; border-radius:6px; font-size:11px; font-family:'JetBrains Mono'; margin:0; border:1px solid #e2e8f0; color:#475569;">
 {
-  "key": "卡密代码",
+  "key": "卡密代码 (可选)",
   "device": "设备机器码",
   "app_key": "上方对应Key"
 }</pre>
-                        </div>
+                        <div style="font-size:11px;color:#64748b;margin-top:8px;">* 若仅传递 app_key 不传卡密，仅返回公开变量。</div>
                     </div>
+                </details>
 
-                    <div class="panel">
-                        <div class="panel-head"><span class="panel-title">创建新应用</span></div>
-                        <div style="padding:24px;">
-                            <form method="POST">
-                                <input type="hidden" name="csrf_token" value="<?=$csrf_token?>">
-                                <input type="hidden" name="create_app" value="1">
-                                <label style="display:block;margin-bottom:8px;font-weight:600;font-size:13px;">应用名称</label>
-                                <input type="text" name="app_name" class="form-control" required placeholder="例如: 安卓客户端V1">
-                                <label style="display:block;margin-bottom:8px;font-weight:600;font-size:13px;">备注</label>
-                                <textarea name="app_notes" class="form-control" style="height:80px;resize:none;"></textarea>
-                                <div style="background:#f8fafc;padding:12px;border-radius:8px;font-size:12px;color:#64748b;margin-bottom:16px;border:1px solid #e2e8f0;">系统将自动生成 App Key，请妥善保管。</div>
-                                <button type="submit" class="btn btn-primary" style="width:100%;">立即创建</button>
-                            </form>
-                        </div>
+                <!-- 创建应用 (折叠) -->
+                <details class="panel" open>
+                    <summary class="panel-head"><span class="panel-title">创建新应用 (点击展开)</span></summary>
+                    <div style="padding:24px;">
+                        <form method="POST">
+                            <input type="hidden" name="csrf_token" value="<?=$csrf_token?>">
+                            <input type="hidden" name="create_app" value="1">
+                            <label style="display:block;margin-bottom:8px;font-weight:600;font-size:13px;">应用名称</label>
+                            <input type="text" name="app_name" class="form-control" required placeholder="例如: 安卓客户端V1">
+                            <label style="display:block;margin-bottom:8px;font-weight:600;font-size:13px;">备注</label>
+                            <textarea name="app_notes" class="form-control" style="height:80px;resize:none;"></textarea>
+                            <div style="background:#f8fafc;padding:12px;border-radius:8px;font-size:12px;color:#64748b;margin-bottom:16px;border:1px solid #e2e8f0;">系统将自动生成 App Key，请妥善保管。</div>
+                            <button type="submit" class="btn btn-primary" style="width:100%;">立即创建</button>
+                        </form>
                     </div>
-                </div>
+                </details>
             </div>
+
+            <!-- 页面2：变量管理 -->
+            <div id="view_vars" style="display:none;">
+                <div class="panel">
+                    <div class="panel-head"><span class="panel-title">变量管理列表</span></div>
+                    <table>
+                        <thead><tr><th>所属应用</th><th>变量名 (Key)</th><th>值 (Value)</th><th>权限</th><th>操作</th></tr></thead>
+                        <tbody>
+                            <?php 
+                            $hasVars = false;
+                            foreach($appList as $app) {
+                                if ($app['id'] == 0) continue;
+                                $vars = $db->getAppVariables($app['id']);
+                                foreach($vars as $v) {
+                                    $hasVars = true;
+                                    echo "<tr>";
+                                    echo "<td><span class='app-tag'>".htmlspecialchars($app['app_name'])."</span></td>";
+                                    echo "<td><span class='code'>".htmlspecialchars($v['key_name'])."</span></td>";
+                                    echo "<td><div style='max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#64748b;' title='".htmlspecialchars($v['value'])."'>".htmlspecialchars($v['value'])."</div></td>";
+                                    echo "<td>".($v['is_public'] ? '<span class="badge badge-success">公开(免登)</span>' : '<span class="badge badge-warn">私有(需登录)</span>')."</td>";
+                                    echo "<td><button type='button' onclick=\"singleAction('del_var', {$v['id']}, 'var_id')\" class='btn btn-danger btn-icon' title='删除变量'><i class='fas fa-trash'></i></button></td>";
+                                    echo "</tr>";
+                                }
+                            }
+                            if(!$hasVars) echo "<tr><td colspan='5' style='text-align:center;padding:20px;color:#94a3b8;'>暂无变量数据，请点击下方添加</td></tr>";
+                            ?>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 添加变量 (折叠) -->
+                <details class="panel" open>
+                    <summary class="panel-head"><span class="panel-title">添加应用变量 (点击展开)</span></summary>
+                    <div style="padding:24px;">
+                        <form method="POST">
+                            <input type="hidden" name="csrf_token" value="<?=$csrf_token?>">
+                            <input type="hidden" name="add_var" value="1">
+                            
+                            <label style="display:block;margin-bottom:8px;font-weight:600;font-size:13px;">所属应用</label>
+                            <select name="var_app_id" class="form-control" required>
+                                <option value="">-- 请选择 --</option>
+                                <?php foreach($appList as $app): if($app['id']==0) continue; ?>
+                                    <option value="<?=$app['id']?>"><?=htmlspecialchars($app['app_name'])?></option>
+                                <?php endforeach; ?>
+                            </select>
+
+                            <label style="display:block;margin-bottom:8px;font-weight:600;font-size:13px;">变量名 (Key)</label>
+                            <input type="text" name="var_key" class="form-control" placeholder="例如: notice_msg" required>
+
+                            <label style="display:block;margin-bottom:8px;font-weight:600;font-size:13px;">变量值 (Value)</label>
+                            <textarea name="var_value" class="form-control" style="height:80px;resize:none;" placeholder="文本、JSON或脚本代码"></textarea>
+
+                            <div style="margin-bottom:16px; display:flex; align-items:center;">
+                                <input type="checkbox" id="var_public" name="var_public" value="1" style="width:auto;margin-right:8px;">
+                                <label for="var_public" style="font-size:13px; font-weight:600; color:#475569;">公开变量 (无需登录即可读取)</label>
+                            </div>
+
+                            <button type="submit" class="btn btn-success" style="background:#10b981; border-color:#10b981; color:white; width:100%;">添加变量</button>
+                        </form>
+                    </div>
+                </details>
+            </div>
+            
+            <script>
+                function switchAppView(view) {
+                    const btnApps = document.getElementById('btn_apps');
+                    const btnVars = document.getElementById('btn_vars');
+                    const divApps = document.getElementById('view_apps');
+                    const divVars = document.getElementById('view_vars');
+                    
+                    if (view === 'apps') {
+                        btnApps.className = 'btn btn-primary';
+                        btnVars.className = 'btn btn-secondary';
+                        divApps.style.display = 'block';
+                        divVars.style.display = 'none';
+                    } else {
+                        btnApps.className = 'btn btn-secondary';
+                        btnVars.className = 'btn btn-primary';
+                        divApps.style.display = 'none';
+                        divVars.style.display = 'block';
+                    }
+                }
+            </script>
         <?php endif; ?>
 
         <?php if($tab == 'list'): ?>
@@ -501,11 +632,25 @@ $activeDevices = $db->getActiveDevices();
                                 <td><?php if($card['app_id']>0 && !empty($card['app_name'])): ?><span class="app-tag"><?=htmlspecialchars($card['app_name'])?></span><?php else: ?><span style="color:#94a3b8;font-size:12px;">未分类</span><?php endif; ?></td>
                                 <td><span class="code" onclick="copy('<?=$card['card_code']?>')" style="cursor:pointer;"><?=$card['card_code']?></span></td>
                                 <td><span style="font-weight:600;font-size:12px;"><?=CARD_TYPES[$card['card_type']]['name']??$card['card_type']?></span></td>
-                                <td><?php if($card['status']==1): echo (strtotime($card['expire_time'])>time()) ? (empty($card['device_hash'])?'<span class="badge badge-warn">待绑定</span>':'<span class="badge badge-success">使用中</span>') : '<span class="badge badge-danger">已过期</span>'; else: echo '<span class="badge badge-neutral">闲置</span>'; endif; ?></td>
+                                <td>
+                                    <?php 
+                                    if($card['status']==2): echo '<span class="badge badge-danger">已封禁</span>';
+                                    elseif($card['status']==1): echo (strtotime($card['expire_time'])>time()) ? (empty($card['device_hash'])?'<span class="badge badge-warn">待绑定</span>':'<span class="badge badge-success">使用中</span>') : '<span class="badge badge-danger">已过期</span>'; 
+                                    else: echo '<span class="badge badge-neutral">闲置</span>'; endif; 
+                                    ?>
+                                </td>
                                 <td style="color:#94a3b8;font-size:12px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?=htmlspecialchars($card['notes']?:'-')?></td>
                                 <td style="display:flex;gap:8px;">
-                                    <?php if($card['status']==1 && !empty($card['device_hash'])): ?><button type="button" onclick="singleAction('unbind_card', <?=$card['id']?>)" class="btn btn-warning btn-icon"><i class="fas fa-unlink"></i></button><?php endif; ?>
-                                    <button type="button" onclick="singleAction('del_card', <?=$card['id']?>)" class="btn btn-danger btn-icon"><i class="fas fa-trash"></i></button>
+                                    <?php if($card['status']==1 && !empty($card['device_hash'])): ?><button type="button" onclick="singleAction('unbind_card', <?=$card['id']?>)" class="btn btn-warning btn-icon" title="解绑设备"><i class="fas fa-unlink"></i></button><?php endif; ?>
+                                    
+                                    <!-- 新增：封禁/解封按钮 -->
+                                    <?php if($card['status']!=2): ?>
+                                        <button type="button" onclick="singleAction('ban_card', <?=$card['id']?>)" class="btn btn-secondary btn-icon" title="封禁卡密" style="color:#ef4444;"><i class="fas fa-ban"></i></button>
+                                    <?php else: ?>
+                                        <button type="button" onclick="singleAction('unban_card', <?=$card['id']?>)" class="btn btn-secondary btn-icon" title="解除封禁" style="color:#10b981;"><i class="fas fa-unlock"></i></button>
+                                    <?php endif; ?>
+                                    
+                                    <button type="button" onclick="singleAction('del_card', <?=$card['id']?>)" class="btn btn-danger btn-icon" title="删除"><i class="fas fa-trash"></i></button>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
@@ -558,7 +703,7 @@ $activeDevices = $db->getActiveDevices();
                             <td><?php if($log['app_name'] && $log['app_name']!=='System'): ?><span class="app-tag" style="font-size:10px;padding:2px 6px;"><?=htmlspecialchars($log['app_name'])?></span><?php else: ?><span style="color:#cbd5e1;font-size:11px;"><?=htmlspecialchars($log['app_name']?:'-')?></span><?php endif; ?></td>
                             <td><span class="code" style="font-size:11px;"><?=$log['card_code']?></span></td>
                             <td style="font-size:11px;"><div><?=$log['ip_address']?></div><div style="color:#94a3b8;font-family:'JetBrains Mono';font-size:10px;"><?=substr($log['device_hash'],0,8)?>...</div></td>
-                            <td><?php $res=$log['result']; echo (strpos($res,'成功')!==false||strpos($res,'活跃')!==false)?'<span class="badge badge-success" style="font-size:10px;">'.$res.'</span>':((strpos($res,'失败')!==false||strpos($res,'过期')!==false)?'<span class="badge badge-danger" style="font-size:10px;">'.$res.'</span>':'<span class="badge badge-neutral" style="font-size:10px;">'.$res.'</span>'); ?></td>
+                            <td><?php $res=$log['result']; echo (strpos($res,'成功')!==false||strpos($res,'活跃')!==false)?'<span class="badge badge-success" style="font-size:10px;">'.$res.'</span>':((strpos($res,'失败')!==false||strpos($res,'过期')!==false||strpos($res,'封禁')!==false)?'<span class="badge badge-danger" style="font-size:10px;">'.$res.'</span>':'<span class="badge badge-neutral" style="font-size:10px;">'.$res.'</span>'); ?></td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -599,12 +744,22 @@ $activeDevices = $db->getActiveDevices();
         const hours = prompt("请输入要增加的小时数 (例如: 24)", "24");
         if(hours && !isNaN(hours)) { document.getElementById('addHoursInput').value = hours; submitBatch('batch_add_time'); }
     }
-    function singleAction(actionName, id) {
+    function singleAction(actionName, id, idFieldName = 'id') {
         if(!confirm('确定执行此操作？')) return;
         const form = document.createElement('form'); form.method = 'POST'; form.style.display = 'none';
         
         const actInput = document.createElement('input'); actInput.name = actionName; actInput.value = '1';
-        const idInput = document.createElement('input'); idInput.name = (actionName.includes('app') ? 'app_id' : 'id'); idInput.value = id;
+        const idInput = document.createElement('input'); 
+        
+        // 特殊处理逻辑：如果是删除变量，ID 字段名为 var_id
+        if(actionName === 'del_var') {
+             idInput.name = 'var_id';
+        } else if (actionName.includes('app')) {
+             idInput.name = 'app_id';
+        } else {
+             idInput.name = 'id';
+        }
+        idInput.value = id;
         
         // 动态注入 CSRF Token
         const csrfInput = document.createElement('input'); csrfInput.name = 'csrf_token'; csrfInput.value = '<?=$csrf_token?>';

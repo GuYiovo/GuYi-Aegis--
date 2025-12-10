@@ -1,97 +1,90 @@
 <?php
-// Verifyfile/api.php - Secure API Endpoint
+// Verifyfile/api.php - 强制免卡密获取变量版
 require_once '../config.php';
 require_once '../database.php';
 
-// 安全响应头
+// 调试标记：确认文件是否更新成功
+header('X-Debug-Version: 2.0'); 
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *'); // 生产环境建议指定具体域名
-header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('X-Content-Type-Options: nosniff');
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
-}
-
-// 简单的 IP 速率限制 (Rate Limiting)
-function checkRateLimit($ip) {
-    $limit = 60; // 每分钟60次
-    $file = sys_get_temp_dir() . '/ent_ratelimit_' . md5($ip);
-    $data = file_exists($file) ? json_decode(file_get_contents($file), true) : ['count'=>0, 'time'=>time()];
-    
-    if (time() - $data['time'] > 60) {
-        $data = ['count' => 1, 'time' => time()];
-    } else {
-        $data['count']++;
-        if ($data['count'] > $limit) return false;
-    }
-    file_put_contents($file, json_encode($data));
-    return true;
-}
-
-$ip = $_SERVER['REMOTE_ADDR'];
-if (!checkRateLimit($ip)) {
-    http_response_code(429);
-    echo json_encode(['code' => 429, 'msg' => 'Too many requests. Please try again later.']);
-    exit;
-}
-
-// 数据处理
-$data = [];
+// 1. 获取参数
 $json_input = file_get_contents('php://input');
-if (!empty($json_input)) {
-    $data = json_decode($json_input, true) ?? [];
-} 
+$data = [];
+if (!empty($json_input)) $data = json_decode($json_input, true) ?? [];
 $data = array_merge($_GET, $_POST, $data);
 
-$card_code = isset($data['card']) ? trim($data['card']) : (isset($data['key']) ? trim($data['key']) : '');
-$device_hash = isset($data['device']) ? trim($data['device']) : (isset($data['machine_id']) ? trim($data['machine_id']) : '');
-$app_key = isset($data['app_key']) ? trim($data['app_key']) : '';
+$card_code = isset($data['card']) ? trim($data['card']) : '';
+$app_key   = isset($data['app_key']) ? trim($data['app_key']) : '';
+$device    = isset($data['device']) ? trim($data['device']) : '';
 
-if (empty($card_code)) {
-    echo json_encode(['code' => 400, 'msg' => 'Missing parameter: card']);
-    exit;
-}
-
-if (empty($device_hash)) {
-    $device_hash = md5($_SERVER['REMOTE_ADDR'] . $_SERVER['HTTP_USER_AGENT']); 
-}
-
+// 2. 逻辑分流
 try {
     $db = new Database();
-    $db->cleanupExpiredDevices();
-    
-    // 增加 app_key 参数传递
-    $result = $db->verifyCard($card_code, $device_hash, $app_key);
-    
-    if ($result['success']) {
-        $expire_timestamp = strtotime($result['expire_time']);
-        $remaining_seconds = max(0, $expire_timestamp - time());
+
+    // ==========================================
+    // 场景 A：无卡密模式 (只看 AppKey) -> 取变量
+    // ==========================================
+    if (empty($card_code) && !empty($app_key)) {
+        
+        // 查找 AppKey 对应的应用
+        $appInfo = $db->getAppIdByKey($app_key);
+        
+        if (!$appInfo) {
+            echo json_encode(['code' => 403, 'msg' => 'AppKey 错误或不存在']);
+            exit;
+        }
+
+        // 获取公开变量
+        // 注意：这里只会返回勾选了 "公开" 的变量
+        $raw_vars = $db->getAppVariables($appInfo['id'], true); 
+        
+        $variables = [];
+        foreach ($raw_vars as $v) {
+            $variables[$v['key_name']] = $v['value'];
+        }
+
+        if (empty($variables)) {
+             echo json_encode(['code' => 200, 'msg' => 'OK', 'data' => ['variables' => null, 'tips' => '连接成功，但该应用下没有公开变量']]);
+             exit;
+        }
 
         echo json_encode([
             'code' => 200,
-            'msg'  => 'OK',
+            'msg' => 'OK',
             'data' => [
-                'status' => 'active',
-                'expire_time' => $result['expire_time'],
-                'remaining_seconds' => $remaining_seconds,
-                'device_id' => $device_hash
+                'variables' => $variables
             ]
         ]);
+        exit; // <--- 关键：直接结束，不走下面的卡密验证
+    }
+
+    // ==========================================
+    // 场景 B：卡密登录模式
+    // ==========================================
+    if (empty($card_code)) {
+        echo json_encode(['code' => 400, 'msg' => '请输入卡密']);
+        exit;
+    }
+
+    if (empty($device)) $device = md5($_SERVER['REMOTE_ADDR']);
+
+    $result = $db->verifyCard($card_code, $device, $app_key);
+    
+    if ($result['success']) {
+        // 登录成功，返回所有变量
+        $variables = [];
+        if (isset($result['app_id']) && $result['app_id'] > 0) {
+            $raw_vars = $db->getAppVariables($result['app_id'], false);
+            foreach ($raw_vars as $v) $variables[$v['key_name']] = $v['value'];
+        }
+
+        echo json_encode(['code' => 200, 'msg' => 'OK', 'data' => ['expire_time' => $result['expire_time'], 'variables' => $variables]]);
     } else {
-        echo json_encode([
-            'code' => 403,
-            'msg'  => $result['message'],
-            'data' => null
-        ]);
+        echo json_encode(['code' => 403, 'msg' => $result['message'], 'data' => null]);
     }
 
 } catch (Exception $e) {
-    // 生产环境不返回具体错误详情，防止泄密
-    echo json_encode([
-        'code' => 500,
-        'msg'  => 'Internal Server Error'
-    ]);
+    // 捕获数据库错误（比如 database.php 没更新导致的错误）
+    echo json_encode(['code' => 500, 'msg' => 'Server Error: ' . $e->getMessage()]);
 }
 ?>
