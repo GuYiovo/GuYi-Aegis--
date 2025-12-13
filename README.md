@@ -1,11 +1,11 @@
 # 🛡️ GuYi Aegis Pro - 企业级验证管理系统
 
 > **📚 官方文档**: [**https://aegis.可爱.top/**](https://aegis.可爱.top/)  
-> *(提示：v7.0 Enterprise 架构已全新升级，为了获得最佳的对接体验，请务必优先查阅官方文档)*
+> *(提示：v8.0 Enterprise 架构已全新升级，为了获得最佳的对接体验，请务必优先查阅官方文档)*
 
 <p align="left">
   <a href="https://aegis.可爱.top/">
-    <img src="https://img.shields.io/badge/Version-v7.0_Enterprise-6366f1.svg?style=flat-square&logo=github&logoColor=white" alt="Version">
+    <img src="https://img.shields.io/badge/Version-v8.0_Enterprise-6366f1.svg?style=flat-square&logo=github&logoColor=white" alt="Version">
   </a>
   <img src="https://img.shields.io/badge/Database-SQLite3_Accelerated-007AFF.svg?style=flat-square&logo=sqlite&logoColor=white" alt="Database">
   <img src="https://img.shields.io/badge/Security-Enterprise_Grade-34C759.svg?style=flat-square&logo=security-scorecard&logoColor=white" alt="Security">
@@ -16,9 +16,9 @@
 
 ## 📖 产品概述
 
-**GuYi Aegis Pro v7.0 Enterprise** 是一套专为独立开发者与中小微企业打造的 **高可用、低代码** 软件授权分发解决方案。
+**GuYi Aegis Pro v8.0 Enterprise** 是一套专为独立开发者与中小微企业打造的 **高可用、低代码** 软件授权分发解决方案。
 
-v7.0 版本彻底移除了 MySQL 依赖，采用独家优化的 **SQLite3 文件数据库架构**，实现了读写性能 300% 的提升与“零配置”秒级部署。系统内置 **App Key 多租户隔离**、**自愈合内核** 以及 **云变量 2.0 引擎**，为您的软件资产提供固若金汤的保护与灵活的分发控制。
+v8.0 版本彻底移除了 MySQL 依赖，采用独家优化的 **SQLite3 文件数据库架构**，实现了读写性能的提升与“零配置”秒级部署。系统内置 **App Key 多租户隔离**、**自愈合内核** 以及 **云变量 2.0 引擎**，为您的软件资产提供固若金汤的保护与灵活的分发控制。
 
 ---
 
@@ -39,7 +39,7 @@ v7.0 版本彻底移除了 MySQL 依赖，采用独家优化的 **SQLite3 文件
 - **灵活鉴权模式**: API 接口支持定向应用鉴权，不同软件之间的用户互不干扰。
 - **实时封禁控制台**: 支持毫秒级的卡密阻断与解封操作，异常情况立即处置。
 
-### ☁️ 3. 云变量 2.0 引擎 (New)
+### ☁️ 3. 云变量引擎
 不更新软件即可动态控制内容，支持 **Upsert** 智能写入逻辑。
 
 - **公开变量 (Public)**: 无需登录即可获取（如：全局公告、版本检测），仅需验证 `App Key`。
@@ -60,35 +60,26 @@ v7.0 版本彻底移除了 MySQL 依赖，采用独家优化的 **SQLite3 文件
 
 ## 📂 部署架构与目录
 
-v7.0 采用轻量化结构，请确保 `/data` 目录拥有 **777 读写权限**：
+v8.0 采用轻量化结构，请确保 `/data` 目录拥有 **777 读写权限**：
 
 ```text
 / (Web Root)
-├── auth_check.php      # [Core] 会话鉴权中间件
-├── cards.php           # [Core] 管理后台控制器 (建议重命名以隐藏入口)
-├── config.php          # [Config] 全局配置文件
-├── database.php        # [Model] 数据库核心类 (ACID事务支持)
-├── index.php           # [View] 用户前台入口
-├── verify.php          # [Controller] 前端验证逻辑
-├── index1.php          # [View] 验证成功落地页
-│
-├── Verifyfile/         # [Module] 外部接口模块
-│   ├── api.php         # 客户端统一接入 API
-│   └── captcha.php     # 图形验证码生成器
-│
-├── backend/            # [Assets] 静态资源库
-│   └── logo.png        # 品牌标识
-│
-└── data/               # [Storage] 数据库目录 (★必须 777 权限)
-    ├── cards.db        # SQLite 数据库 (自动创建/自愈)
-    └── .htaccess       # Apache 防下载安全规则
+├── Verifyfile/           <span class="tok-c"># [核心] 功能目录</span>
+│   ├── captcha.php       <span class="tok-c"># 验证码生成</span>
+│   └── api.php           <span class="tok-c"># API接口（外部调用）</span>
+├── backend/              <span class="tok-c"># 后台资源目录</span>
+│   └── logo.png          <span class="tok-c"># 系统 Logo</span>
+├── js/              <span class="tok-c">#js</span>
+│   └── main.js          <span class="tok-c"># 前端验证js</span>
+├── data/                 <span class="tok-c"># [核心] 数据库目录 <span class="text-red-400 font-bold">★ 必须 777 权限</span></span>
+│   ├── cards.db          <span class="tok-c"># SQLite 数据库文件 (自动创建)</span>
+│   └── .htaccess         <span class="tok-c"># Apache 保护配置</span>
+├── index.php             <span class="tok-c"># 前端验证页面</span>
+├── index1.php            <span class="tok-c"># 验证成功页面</span>
+├── cards.php             <span class="tok-c"># 后台管理系统（主控制台）</span>
+├── verify.php            <span class="tok-c"># 前端验证处理接口</span>
+├── auth_check.php        <span class="tok-c"># 统一身份验证检查</span>
+├── config.php            <span class="tok-c"># 系统配置文件</span>
+└── database.php          <span class="tok-c"># 数据库核心类</span></div>
 ```
-
-🚀 v7.0 Enterprise 更新日志摘要
-- **[架构]** 底层迁移至 SQLite3，性能提升 300%，移除 MySQL 依赖。
-- **[功能]** 新增 App Key 多租户系统，支持无限应用隔离。
-- **[功能]** 云变量 2.0 上线，支持公开/私有双重作用域。
-- **[安全]** 全局 CSRF 防护与 PDO 预处理重构。
-- **[体验]** 文档中心重构，新增 10+ 种语言接入示例。
-
 Copyright © 2026 GuYi Aegis Pro. All Rights Reserved.
