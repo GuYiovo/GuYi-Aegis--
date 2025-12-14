@@ -1,5 +1,5 @@
 <?php
-// database.php - 核心数据库类 
+// database.php - 核心数据库类 (MySQL Optimized)
 require_once 'config.php';
 
 if (!class_exists('Database')) {
@@ -9,33 +9,33 @@ if (!class_exists('Database')) {
         
         public function __construct() {
             try {
-                $db_dir = dirname(DB_PATH);
-                if (!is_dir($db_dir)) {
-                    mkdir($db_dir, 0755, true);
-                }
-                
-                $this->pdo = new PDO('sqlite:' . DB_PATH);
+                $dsn = "mysql:host=".DB_HOST.";port=".DB_PORT.";dbname=".DB_NAME.";charset=utf8mb4";
+                $this->pdo = new PDO($dsn, DB_USER, DB_PASS);
                 $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                $this->pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
                 
                 $this->createTables();
                 $this->migrateForMultiTenant();
                 
             } catch (PDOException $e) {
                 error_log('DB Error: ' . $e->getMessage());
-                die('System Maintenance: Database connection failed.');
+                die('System Maintenance: Database connection failed. Please check config.php');
             }
         }
         
         private function createTables() {
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS applications (id INTEGER PRIMARY KEY AUTOINCREMENT, app_name VARCHAR(100) NOT NULL UNIQUE, app_key VARCHAR(64) NOT NULL UNIQUE, status INTEGER DEFAULT 1, create_time DATETIME DEFAULT CURRENT_TIMESTAMP, notes TEXT)");
+            // ENGINE=InnoDB 是高并发的关键，支持行锁和内存缓冲池
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS applications (id INT AUTO_INCREMENT PRIMARY KEY, app_name VARCHAR(100) NOT NULL UNIQUE, app_key VARCHAR(64) NOT NULL UNIQUE, status TINYINT DEFAULT 1, create_time DATETIME DEFAULT CURRENT_TIMESTAMP, notes TEXT) ENGINE=InnoDB");
             
-            // 确保变量表存在
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS app_variables (id INTEGER PRIMARY KEY AUTOINCREMENT, app_id INTEGER NOT NULL, key_name VARCHAR(50) NOT NULL, value TEXT, is_public INTEGER DEFAULT 0, create_time DATETIME DEFAULT CURRENT_TIMESTAMP)");
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS app_variables (id INT AUTO_INCREMENT PRIMARY KEY, app_id INT NOT NULL, key_name VARCHAR(50) NOT NULL, value TEXT, is_public TINYINT DEFAULT 0, create_time DATETIME DEFAULT CURRENT_TIMESTAMP, INDEX idx_app_var (app_id, key_name)) ENGINE=InnoDB");
 
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS cards (id INTEGER PRIMARY KEY AUTOINCREMENT, card_code VARCHAR(50) UNIQUE NOT NULL, card_type VARCHAR(20) NOT NULL, status INTEGER DEFAULT 0, device_hash VARCHAR(100), used_time DATETIME, expire_time DATETIME, create_time DATETIME DEFAULT CURRENT_TIMESTAMP, notes TEXT)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, card_code VARCHAR(50) NOT NULL, card_type VARCHAR(20) NOT NULL, device_hash VARCHAR(100) NOT NULL, ip_address VARCHAR(45), user_agent TEXT, access_time DATETIME DEFAULT CURRENT_TIMESTAMP, result VARCHAR(100))");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS active_devices (id INTEGER PRIMARY KEY AUTOINCREMENT, device_hash VARCHAR(100) NOT NULL, card_code VARCHAR(50) UNIQUE NOT NULL, card_type VARCHAR(20) NOT NULL, activate_time DATETIME DEFAULT CURRENT_TIMESTAMP, expire_time DATETIME NOT NULL, status INTEGER DEFAULT 1)");
-            $this->pdo->exec("CREATE TABLE IF NOT EXISTS admin (id INTEGER PRIMARY KEY, username VARCHAR(50) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL)");
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS cards (id INT AUTO_INCREMENT PRIMARY KEY, card_code VARCHAR(50) UNIQUE NOT NULL, card_type VARCHAR(20) NOT NULL, status TINYINT DEFAULT 0, device_hash VARCHAR(100), used_time DATETIME, expire_time DATETIME, create_time DATETIME DEFAULT CURRENT_TIMESTAMP, notes TEXT, app_id INT DEFAULT 0, INDEX idx_card_app (app_id), INDEX idx_card_hash (device_hash)) ENGINE=InnoDB");
+            
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS usage_logs (id INT AUTO_INCREMENT PRIMARY KEY, card_code VARCHAR(50) NOT NULL, card_type VARCHAR(20) NOT NULL, device_hash VARCHAR(100) NOT NULL, ip_address VARCHAR(45), user_agent TEXT, access_time DATETIME DEFAULT CURRENT_TIMESTAMP, result VARCHAR(100), app_name VARCHAR(100) DEFAULT 'System', INDEX idx_log_time (access_time)) ENGINE=InnoDB");
+            
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS active_devices (id INT AUTO_INCREMENT PRIMARY KEY, device_hash VARCHAR(100) NOT NULL, card_code VARCHAR(50) UNIQUE NOT NULL, card_type VARCHAR(20) NOT NULL, activate_time DATETIME DEFAULT CURRENT_TIMESTAMP, expire_time DATETIME NOT NULL, status TINYINT DEFAULT 1, app_id INT DEFAULT 0, INDEX idx_dev_hash (device_hash), INDEX idx_dev_expire (expire_time)) ENGINE=InnoDB");
+            
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS admin (id INT PRIMARY KEY, username VARCHAR(50) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL) ENGINE=InnoDB");
             
             if ($this->pdo->query("SELECT COUNT(*) FROM admin")->fetchColumn() == 0) {
                 $this->pdo->prepare("INSERT INTO admin (id, username, password_hash) VALUES (1, 'admin', ?)")->execute([password_hash('admin123', PASSWORD_DEFAULT)]);
@@ -44,19 +44,17 @@ if (!class_exists('Database')) {
 
         private function ensureColumnExists($table, $column, $definition) {
             try {
-                $res = $this->pdo->query("PRAGMA table_info($table)")->fetchAll(PDO::FETCH_ASSOC);
-                $cols = array_column($res, 'name');
-                if (!in_array($column, $cols)) {
-                    $this->pdo->exec("ALTER TABLE $table ADD COLUMN $column $definition");
+                $stmt = $this->pdo->query("SHOW COLUMNS FROM `$table` LIKE '$column'");
+                if ($stmt->rowCount() == 0) {
+                    $this->pdo->exec("ALTER TABLE `$table` ADD COLUMN $column $definition");
                 }
             } catch (Exception $e) { }
         }
 
         private function migrateForMultiTenant() {
-            $this->ensureColumnExists('cards', 'app_id', 'INTEGER DEFAULT 0');
-            $this->pdo->exec("CREATE INDEX IF NOT EXISTS idx_cards_app_id ON cards (app_id)");
+            $this->ensureColumnExists('cards', 'app_id', 'INT DEFAULT 0');
             $this->ensureColumnExists('usage_logs', 'app_name', "VARCHAR(100) DEFAULT 'System'");
-            $this->ensureColumnExists('active_devices', 'app_id', 'INTEGER DEFAULT 0');
+            $this->ensureColumnExists('active_devices', 'app_id', 'INT DEFAULT 0');
         }
 
         // --- 应用管理 ---
@@ -113,9 +111,11 @@ if (!class_exists('Database')) {
             return $stmt->fetch(PDO::FETCH_ASSOC);
         }
 
-        // --- 验证核心 ---
+        // --- 验证核心 (高并发优化) ---
         public function verifyCard($cardCode, $deviceHash, $appKey = null) {
+            // MySQL 自动清理过期设备 (利用 NOW())
             $this->cleanupExpiredDevices();
+            
             $ip = $_SERVER['REMOTE_ADDR'] ?? 'Unknown'; $ua = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown';
             $app = null; $appNameForLog = 'System'; $appIdStr = " = 0"; 
 
@@ -127,7 +127,8 @@ if (!class_exists('Database')) {
                 $appIdStr = " = {$app['id']}";
             }
 
-            $deviceStmt = $this->pdo->prepare("SELECT * FROM active_devices WHERE device_hash = ? AND status = 1 AND expire_time > datetime('now') AND app_id {$appIdStr}");
+            // 使用 NOW() 代替 datetime('now')
+            $deviceStmt = $this->pdo->prepare("SELECT * FROM active_devices WHERE device_hash = ? AND status = 1 AND expire_time > NOW() AND app_id {$appIdStr}");
             $deviceStmt->execute([$deviceHash]);
             if ($active = $deviceStmt->fetch(PDO::FETCH_ASSOC)) {
                 if ($active['card_code'] === $cardCode) {
@@ -152,12 +153,19 @@ if (!class_exists('Database')) {
                 if (!empty($card['device_hash']) && $card['device_hash'] !== $deviceHash) return ['success' => false, 'message' => '卡密已绑定其他设备'];
                 if ($card['device_hash'] !== $deviceHash) $this->pdo->prepare("UPDATE cards SET device_hash=? WHERE id=?")->execute([$deviceHash, $card['id']]);
                 
-                $this->pdo->prepare("INSERT OR REPLACE INTO active_devices (device_hash, card_code, card_type, expire_time, status, app_id) VALUES (?, ?, ?, ?, 1, ?)")->execute([$deviceHash, $cardCode, $card['card_type'], $card['expire_time'], $app ? $app['id'] : 0]);
+                // MySQL 使用 REPLACE INTO 或 ON DUPLICATE KEY UPDATE 效率更高
+                $this->pdo->prepare("REPLACE INTO active_devices (device_hash, card_code, card_type, expire_time, status, app_id) VALUES (?, ?, ?, ?, 1, ?)")->execute([$deviceHash, $cardCode, $card['card_type'], $card['expire_time'], $app ? $app['id'] : 0]);
                 return ['success' => true, 'message' => '验证通过', 'expire_time' => $card['expire_time'], 'app_id' => $app ? $app['id'] : 0];
             } else {
                 $duration = CARD_TYPES[$card['card_type']]['duration'] ?? 86400;
-                $expireTime = date('Y-m-d H:i:s', time() + $duration);
-                $this->pdo->prepare("UPDATE cards SET status=1, device_hash=?, used_time=datetime('now','localtime'), expire_time=? WHERE id=?")->execute([$deviceHash, $expireTime, $card['id']]);
+                // 使用 DATE_ADD
+                $this->pdo->prepare("UPDATE cards SET status=1, device_hash=?, used_time=NOW(), expire_time=DATE_ADD(NOW(), INTERVAL ? SECOND) WHERE id=?")->execute([$deviceHash, $duration, $card['id']]);
+                
+                // 获取计算后的过期时间
+                $newExpStmt = $this->pdo->prepare("SELECT expire_time FROM cards WHERE id=?");
+                $newExpStmt->execute([$card['id']]);
+                $expireTime = $newExpStmt->fetchColumn();
+
                 $this->pdo->prepare("INSERT INTO active_devices (device_hash, card_code, card_type, expire_time, status, app_id) VALUES (?, ?, ?, ?, 1, ?)")->execute([$deviceHash, $cardCode, $card['card_type'], $expireTime, $app ? $app['id'] : 0]);
                 $this->logUsage($cardCode, $card['card_type'], $deviceHash, $ip, $ua, '激活成功', $appNameForLog);
                 return ['success' => true, 'message' => '首次激活成功', 'expire_time' => $expireTime, 'app_id' => $app ? $app['id'] : 0];
@@ -166,13 +174,36 @@ if (!class_exists('Database')) {
 
         public function batchDeleteCards($ids) { if (empty($ids)) return 0; $placeholders = implode(',', array_fill(0, count($ids), '?')); $stmt = $this->pdo->prepare("DELETE FROM cards WHERE id IN ($placeholders)"); $stmt->execute($ids); return $stmt->rowCount(); }
         public function batchUnbindCards($ids) { if (empty($ids)) return 0; $placeholders = implode(',', array_fill(0, count($ids), '?')); $this->pdo->beginTransaction(); try { $stmt = $this->pdo->prepare("SELECT card_code FROM cards WHERE id IN ($placeholders)"); $stmt->execute($ids); $codes = $stmt->fetchAll(PDO::FETCH_COLUMN); if($codes) { $codePlaceholders = implode(',', array_fill(0, count($codes), '?')); $this->pdo->prepare("DELETE FROM active_devices WHERE card_code IN ($codePlaceholders)")->execute($codes); } $this->pdo->prepare("UPDATE cards SET device_hash = NULL WHERE id IN ($placeholders)")->execute($ids); $this->pdo->commit(); return count($ids); } catch (Exception $e) { $this->pdo->rollBack(); return 0; } }
-        public function batchAddTime($ids, $hours) { if (empty($ids) || $hours <= 0) return 0; $seconds = intval($hours * 3600); $placeholders = implode(',', array_fill(0, count($ids), '?')); $this->pdo->beginTransaction(); try { $stmt = $this->pdo->prepare("SELECT card_code FROM cards WHERE id IN ($placeholders) AND status = 1"); $stmt->execute($ids); $codes = $stmt->fetchAll(PDO::FETCH_COLUMN); if($codes) { $codePlaceholders = implode(',', array_fill(0, count($codes), '?')); $this->pdo->prepare("UPDATE cards SET expire_time = datetime(expire_time, '+{$seconds} seconds') WHERE id IN ($placeholders) AND status = 1")->execute($ids); $this->pdo->prepare("UPDATE active_devices SET expire_time = datetime(expire_time, '+{$seconds} seconds') WHERE card_code IN ($codePlaceholders)")->execute($codes); } $this->pdo->commit(); return count($codes); } catch (Exception $e) { $this->pdo->rollBack(); return 0; } }
+        
+        public function batchAddTime($ids, $hours) { 
+            if (empty($ids) || $hours <= 0) return 0; 
+            $seconds = intval($hours * 3600); 
+            $placeholders = implode(',', array_fill(0, count($ids), '?')); 
+            $this->pdo->beginTransaction(); 
+            try { 
+                $stmt = $this->pdo->prepare("SELECT card_code FROM cards WHERE id IN ($placeholders) AND status = 1"); 
+                $stmt->execute($ids); 
+                $codes = $stmt->fetchAll(PDO::FETCH_COLUMN); 
+                if($codes) { 
+                    $codePlaceholders = implode(',', array_fill(0, count($codes), '?')); 
+                    // MySQL 语法 DATE_ADD
+                    $this->pdo->prepare("UPDATE cards SET expire_time = DATE_ADD(expire_time, INTERVAL {$seconds} SECOND) WHERE id IN ($placeholders) AND status = 1")->execute($ids); 
+                    $this->pdo->prepare("UPDATE active_devices SET expire_time = DATE_ADD(expire_time, INTERVAL {$seconds} SECOND) WHERE card_code IN ($codePlaceholders)")->execute($codes); 
+                } 
+                $this->pdo->commit(); 
+                return count($codes); 
+            } catch (Exception $e) { 
+                $this->pdo->rollBack(); 
+                return 0; 
+            } 
+        }
+        
         public function getCardsByIds($ids) { if(empty($ids)) return []; $placeholders = implode(',', array_fill(0, count($ids), '?')); $stmt = $this->pdo->prepare("SELECT * FROM cards WHERE id IN ($placeholders)"); $stmt->execute($ids); return $stmt->fetchAll(PDO::FETCH_ASSOC); }
         public function resetDeviceBindingByCardId($id) { return $this->batchUnbindCards([$id]); }
         public function updateCardStatus($id, $status) { if ($status == 1) { $check = $this->pdo->prepare("SELECT expire_time FROM cards WHERE id = ?"); $check->execute([$id]); $row = $check->fetch(PDO::FETCH_ASSOC); if ($row && empty($row['expire_time'])) { $status = 0; } } $this->pdo->prepare("UPDATE cards SET status=? WHERE id=?")->execute([$status, $id]); if ($status == 2) { $codeStmt = $this->pdo->prepare("SELECT card_code FROM cards WHERE id = ?"); $codeStmt->execute([$id]); $code = $codeStmt->fetchColumn(); if ($code) { $this->pdo->prepare("DELETE FROM active_devices WHERE card_code = ?")->execute([$code]); } } }
-        public function getDashboardData() { $total = $this->pdo->query("SELECT COUNT(*) FROM cards")->fetchColumn(); $unused = $this->pdo->query("SELECT COUNT(*) FROM cards WHERE status = 0")->fetchColumn(); $used = $this->pdo->query("SELECT COUNT(*) FROM cards WHERE status = 1")->fetchColumn(); $active = $this->pdo->query("SELECT COUNT(*) FROM active_devices WHERE status = 1 AND expire_time > datetime('now')")->fetchColumn(); $types = $this->pdo->query("SELECT card_type, COUNT(*) as count FROM cards GROUP BY card_type")->fetchAll(PDO::FETCH_KEY_PAIR); $appStats = $this->pdo->query("SELECT IFNULL(T2.app_name, '通用/未分类') as app_name, COUNT(T1.id) as count FROM cards T1 LEFT JOIN applications T2 ON T1.app_id = T2.id GROUP BY T1.app_id ORDER BY count DESC LIMIT 5")->fetchAll(PDO::FETCH_ASSOC); return ['stats' => ['total' => $total, 'unused' => $unused, 'used' => $used, 'active' => $active], 'chart_types' => $types, 'app_stats' => $appStats]; }
+        public function getDashboardData() { $total = $this->pdo->query("SELECT COUNT(*) FROM cards")->fetchColumn(); $unused = $this->pdo->query("SELECT COUNT(*) FROM cards WHERE status = 0")->fetchColumn(); $used = $this->pdo->query("SELECT COUNT(*) FROM cards WHERE status = 1")->fetchColumn(); $active = $this->pdo->query("SELECT COUNT(*) FROM active_devices WHERE status = 1 AND expire_time > NOW()")->fetchColumn(); $types = $this->pdo->query("SELECT card_type, COUNT(*) as count FROM cards GROUP BY card_type")->fetchAll(PDO::FETCH_KEY_PAIR); $appStats = $this->pdo->query("SELECT IFNULL(T2.app_name, '通用/未分类') as app_name, COUNT(T1.id) as count FROM cards T1 LEFT JOIN applications T2 ON T1.app_id = T2.id GROUP BY T1.app_id ORDER BY count DESC LIMIT 5")->fetchAll(PDO::FETCH_ASSOC); return ['stats' => ['total' => $total, 'unused' => $unused, 'used' => $used, 'active' => $active], 'chart_types' => $types, 'app_stats' => $appStats]; }
         
-        // --- 分页相关新方法 (修改后支持状态筛选) ---
+        // --- 分页相关 ---
         public function getTotalCardCount($statusFilter = null) {
             if ($statusFilter !== null) {
                 $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM cards WHERE status = ?");
@@ -202,13 +233,13 @@ if (!class_exists('Database')) {
         public function getAllCards() { return $this->pdo->query("SELECT T1.*, IFNULL(T2.app_name, '通用') as app_name FROM cards T1 LEFT JOIN applications T2 ON T1.app_id = T2.id ORDER BY T1.create_time DESC LIMIT 500")->fetchAll(PDO::FETCH_ASSOC); }
         public function searchCards($k) { $s="%$k%"; $q=$this->pdo->prepare("SELECT T1.*, IFNULL(T2.app_name, '通用') as app_name FROM cards T1 LEFT JOIN applications T2 ON T1.app_id = T2.id WHERE T1.card_code LIKE ? OR T1.notes LIKE ? OR T1.device_hash LIKE ? OR T2.app_name LIKE ?"); $q->execute([$s,$s,$s,$s]); return $q->fetchAll(PDO::FETCH_ASSOC); }
         public function getUsageLogs($l, $o) { $q=$this->pdo->prepare("SELECT * FROM usage_logs ORDER BY access_time DESC LIMIT ? OFFSET ?"); $q->bindValue(1,$l,PDO::PARAM_INT); $q->bindValue(2,$o,PDO::PARAM_INT); $q->execute(); return $q->fetchAll(PDO::FETCH_ASSOC); }
-        public function getActiveDevices() { return $this->pdo->query("SELECT T1.*, IFNULL(T2.app_name, '通用') as app_name FROM active_devices T1 LEFT JOIN applications T2 ON T1.app_id = T2.id WHERE T1.status=1 AND T1.expire_time > datetime('now') ORDER BY T1.activate_time DESC")->fetchAll(PDO::FETCH_ASSOC); }
+        public function getActiveDevices() { return $this->pdo->query("SELECT T1.*, IFNULL(T2.app_name, '通用') as app_name FROM active_devices T1 LEFT JOIN applications T2 ON T1.app_id = T2.id WHERE T1.status=1 AND T1.expire_time > NOW() ORDER BY T1.activate_time DESC")->fetchAll(PDO::FETCH_ASSOC); }
         public function generateCards($count, $type, $pre, $suf, $len, $note, $appId = 0) { $this->pdo->beginTransaction(); try { $stmt = $this->pdo->prepare("INSERT INTO cards (card_code, card_type, notes, app_id) VALUES (?, ?, ?, ?)"); for ($i=0; $i<$count; $i++) { $code = $pre . $this->randStr($len) . $suf; $stmt->execute([$code, $type, $note, $appId]); } $this->pdo->commit(); } catch(Exception $e) { $this->pdo->rollBack(); throw $e; } }
         public function deleteCard($id) { $this->pdo->prepare("DELETE FROM cards WHERE id=?")->execute([$id]); }
         public function getAdminHash() { return $this->pdo->query("SELECT password_hash FROM admin WHERE id=1")->fetchColumn(); }
         public function updateAdminPassword($pwd) { $this->pdo->prepare("UPDATE admin SET password_hash=? WHERE id=1")->execute([password_hash($pwd, PASSWORD_DEFAULT)]); }
-        public function cleanupExpiredDevices() { $this->pdo->exec("UPDATE active_devices SET status=0 WHERE status=1 AND expire_time <= datetime('now')"); }
-        private function logUsage($c, $t, $d, $i, $u, $r, $appName = 'System') { $this->pdo->prepare("INSERT INTO usage_logs (card_code, card_type, device_hash, ip_address, user_agent, result, app_name, access_time) VALUES (?,?,?,?,?,?,?,datetime('now','localtime'))")->execute([$c,$t,$d,$i,$u,$r,$appName]); }
+        public function cleanupExpiredDevices() { $this->pdo->exec("UPDATE active_devices SET status=0 WHERE status=1 AND expire_time <= NOW()"); }
+        private function logUsage($c, $t, $d, $i, $u, $r, $appName = 'System') { $this->pdo->prepare("INSERT INTO usage_logs (card_code, card_type, device_hash, ip_address, user_agent, result, app_name, access_time) VALUES (?,?,?,?,?,?,?,NOW())")->execute([$c,$t,$d,$i,$u,$r,$appName]); }
         private function randStr($l) { $c='23456789ABCDEFGHJKLMNPQRSTUVWXYZ'; $r=''; for($i=0;$i<$l;$i++) $r.=$c[rand(0,strlen($c)-1)]; return $r; }
     }
 }

@@ -1,3 +1,8 @@
+<?php
+require_once 'config.php'; // 必须放在第一行！它会负责检查是否安装，没安装会自动跳转
+
+// ...
+?>
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>

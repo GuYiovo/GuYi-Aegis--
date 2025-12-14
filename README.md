@@ -1,13 +1,13 @@
 # 🛡️ GuYi Aegis Pro - 企业级验证管理系统
 
 > **📚 官方文档**: [**https://aegis.可爱.top/**](https://aegis.可爱.top/)  
-> *(提示：v8.0 Enterprise 架构已全新升级，为了获得最佳的对接体验，请务必优先查阅官方文档)*
+> *(提示：v9.0 Enterprise 架构已全新升级，为了获得最佳的对接体验，请务必优先查阅官方文档)*
 
 <p align="left">
   <a href="https://aegis.可爱.top/">
-    <img src="https://img.shields.io/badge/Version-v8.0_Enterprise-6366f1.svg?style=flat-square&logo=github&logoColor=white" alt="Version">
+    <img src="https://img.shields.io/badge/Version-v9.0_Enterprise-6366f1.svg?style=flat-square&logo=github&logoColor=white" alt="Version">
   </a>
-  <img src="https://img.shields.io/badge/Database-SQLite3_Accelerated-007AFF.svg?style=flat-square&logo=sqlite&logoColor=white" alt="Database">
+  <img src="https://img.shields.io/badge/Database-MySQL_High_Concurrency-007AFF.svg?style=flat-square&logo=mysql&logoColor=white" alt="Database">
   <img src="https://img.shields.io/badge/Security-Enterprise_Grade-34C759.svg?style=flat-square&logo=security-scorecard&logoColor=white" alt="Security">
   <img src="https://img.shields.io/badge/License-Proprietary-FF3B30.svg?style=flat-square" alt="License">
 </p>
@@ -16,9 +16,9 @@
 
 ## 📖 产品概述
 
-**GuYi Aegis Pro v8.0 Enterprise** 是一套专为独立开发者与中小微企业打造的 **高可用、低代码** 软件授权分发解决方案。
+**GuYi Aegis Pro v9.0 Enterprise** 是一套专为独立开发者与中小微企业打造的 **高并发、低延迟** 软件授权分发解决方案。
 
-v8.0 版本彻底移除了传统数据库依赖，采用独家优化的 **SQLite3 文件数据库架构**，实现了读写性能的显著提升与“零配置”秒级部署。系统内置 **App Key 多租户隔离**、**自愈合内核** 以及 **云变量 2.0 引擎**，为您的软件资产提供固若金汤的保护与灵活高效的分发控制。
+v9.0 版本彻底重构了数据持久层，弃用了 SQLite，转而采用高性能的 **MySQL 数据库架构**，专为海量数据吞吐与高频并发验证场景设计。系统内置 **App Key 多租户隔离**、**MySQL 连接池优化** 以及 **云变量 2.0 引擎**，为您的软件资产提供固若金汤的保护与灵活高效的分发控制。
 
 ---
 
@@ -53,25 +53,25 @@ v8.0 版本彻底移除了传统数据库依赖，采用独家优化的 **SQLite
 -   **私有变量 (Private)**: `Verifyfile/api.php` 在卡密验证通过后，与卡密有效期等信息一同下发所有变量（包括私有变量），适用于 VIP 下载链接、专用配置等敏感资源。
 -   **灵活配置**: `cards.php` 后台可为每个应用添加、删除和管理专属云变量，并设置其公开/私有权限。
 
-### ⚡ 4. 高性能自愈内核
-基于 SQLite3 的深度优化，确保数据操作的原子性与高可用性。
+### ⚡ 4. 高并发 MySQL 内核
+基于 MySQL InnoDB 引擎的深度优化，确保数据操作的原子性与高可用性。
 
--   **Database Self-Healing**: `database.php` 在初始化时，通过 `ensureColumnExists` 方法自动检测并修复/添加缺失的表结构和字段（例如多租户相关的 `app_id` 字段），防止因数据库版本不匹配导致的白屏或错误。
--   **连接池优化**: 针对 SQLite 的文件锁特性，`database.php` 在批量操作 (如 `batchUnbindCards`, `batchAddTime`) 中使用事务 (`beginTransaction`, `commit`, `rollBack`) 机制，确保数据一致性和并发处理效率。
+-   **MySQL InnoDB 优化**: `database.php` 全面适配 MySQL，所有数据表均使用 `ENGINE=InnoDB`，支持行级锁和高并发事务处理。
+-   **事务一致性保障**: 在批量操作 (如 `batchUnbindCards`, `batchAddTime`) 中使用数据库事务 (`beginTransaction`, `commit`, `rollBack`) 机制，确保数据在高并发场景下的绝对一致性。
 -   **智能风控**: `database.php` 的 `verifyCard` 逻辑自动计算设备指纹 (Device Hash)。系统支持 `database.php` 中的 `cleanupExpiredDevices` 定期清理过期设备，后台管理 (`cards.php`) 支持一键解绑设备 (`batch_unbind`)。
--   **文件系统保护**: `config.php` 在数据目录 `/data` 下自动写入 `.htaccess` 文件 (`Order Deny,Allow\nDeny from all`)，禁止外部直接访问 SQLite 数据库文件，保障数据安全。
+-   **自动安装引导**: 提供 `install.php` 安装向导，自动检测 PHP 环境扩展，引导用户配置数据库连接，并自动生成安全的 `config.php` 配置文件。
 
 ### 👨‍💻 5. 极致开发者体验 (DX)
 -   **RESTful API**: `Verifyfile/api.php` 提供标准化的 JSON 接口设计，方便各类客户端集成，返回 `code`, `msg`, `data` 结构。
 -   **开箱即用前端**: `index.php` 提供功能完善的前端验证页面，并搭配 `js/main.js` 处理卡密格式化、设备指纹生成、LocalStorage 记住卡密等功能，以及友好的提示与动画效果。
 -   **多语言示例**: 官方文档 (aegis.可爱.top) 提供 **Python, Java, C#, Go, Node.js, EPL** 等 10+ 种主流语言的 Copy-Paste Ready 调用代码，加速开发进程。
--   **易于部署**: 采用 SQLite3 数据库，无需额外配置数据库服务，文件拷贝即可运行。
+-   **标准环境支持**: 完美支持 Nginx/Apache + PHP 7.4+ + MySQL 5.7/8.0 生产环境。
 
 ---
 
 ## 📂 部署架构与目录
 
-v8.0 采用轻量化结构，请确保 `/data` 目录拥有 **777 读写权限**：
+v9.0 采用 MySQL 数据库存储，无需本地数据文件，请确保 Web 根目录可写以便安装程序生成配置文件：
 
 ```text
 / (Web Root)
@@ -85,15 +85,13 @@ v8.0 采用轻量化结构，请确保 `/data` 目录拥有 **777 读写权限**
 ├── assets/               # 其他前端资源目录
 │   ├── css/              # 样式文件 (如 all.min.css, css2.css, remixicon.css)
 │   └── js/               # JavaScript 文件 (如 chart.js)
-├── data/                 # [核心] 数据库目录 ★ 必须 777 权限
-│   ├── cards.db          # SQLite 数据库文件 (系统自动创建和管理)
-│   └── .htaccess         # Apache/Nginx 保护配置 (禁止直接访问 .db 文件，自动生成)
+├── install.php           # [新增] 系统安装向导 (初次部署请访问此文件)
 ├── index.php             # 前端卡密验证页面 (用户在此输入卡密进行验证)
 ├── index1.php            # 卡密验证成功后跳转的页面 (可自定义展示卡密信息)
 ├── cards.php             # 后台管理系统主控制台 (管理员登录和管理所有功能)
 ├── verify.php            # 前端验证页面 (index.php) 的后端处理接口
 ├── auth_check.php        # 统一身份验证检查文件 (用于保护后台和敏感页面)
-├── config.php            # 系统核心配置文件 (包含安全密钥、数据库路径、错误配置等)
-└── database.php          # 数据库操作核心类 (封装所有数据库交互逻辑)
+├── config.php            # 系统核心配置文件 (包含数据库连接信息，安装后自动生成)
+└── database.php          # 数据库操作核心类 (封装 PDO_MySQL 所有交互逻辑)
 
 Copyright © 2026 GuYi Aegis Pro. All Rights Reserved.
