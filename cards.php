@@ -391,13 +391,10 @@ if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
     <title>GuYi Aegis Pro</title>
     <link rel="icon" href="backend/logo.png" type="image/png">
     
-    <!-- 本地化 CSS -->
     <link href="assets/css/all.min.css" rel="stylesheet">
     
-    <!-- 字体 -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     
-    <!-- 本地化 JS -->
     <script src="assets/js/chart.js"></script>
 
     <style>
@@ -553,18 +550,14 @@ if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
         <?php if($errorMsg): ?><div style="font-size:13px; color:var(--danger); background:#fef2f2; padding:6px 12px; border-radius:20px; font-weight:600; display:none;"><i class="fas fa-exclamation-circle"></i> <?=$errorMsg?></div><?php endif; ?>
     </header>
 
-    <!-- 面包屑导航 -->
     <div class="breadcrumb-bar">
         首页 <span style="font-family:sans-serif;">&gt;</span> 单码应用 <span style="font-family:sans-serif;">&gt;</span> <?=$currentTitle?>
     </div>
 
-    <!-- 动态多标签页容器 -->
     <div class="chrome-tabs" id="tabs-container">
-        <!-- JS 将在这里注入标签 -->
-    </div>
+        </div>
 
     <div class="content">
-        <!-- 移动端提示框 -->
         <?php if($msg): ?><div style="margin-bottom:15px; font-size:13px; color:var(--success); background:#ecfdf5; padding:10px; border-radius:8px; border:1px solid #a7f3d0;"><i class="fas fa-check-circle"></i> <?=$msg?></div><?php endif; ?>
         <?php if($errorMsg): ?><div style="margin-bottom:15px; font-size:13px; color:var(--danger); background:#fef2f2; padding:10px; border-radius:8px; border:1px solid #fecaca;"><i class="fas fa-exclamation-circle"></i> <?=$errorMsg?></div><?php endif; ?>
 
@@ -578,7 +571,7 @@ if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
                             <span style="font-size: 11px; background: #3b82f6; color: white; padding: 2px 8px; border-radius: 10px; font-weight: 500;">NEW</span>
                         </div>
                         <div style="font-size: 14px; color: #475569; line-height: 1.6;">
-                            欢迎使用 <b>GuYi Aegis Pro</b> 企业级验证管理系统。当前系统版本已更新至 V11.0。<br>
+                            欢迎使用 <b>GuYi Aegis Pro</b> 企业级验证管理系统。当前系统版本已更新至 V12.1。<br>
                             <ul style="margin: 5px 0 0 0; padding-left: 20px;">
                                 <li>QQ群562807728</li>
                                 <li>有bug可以进去反馈 <a href="?tab=logs" style="color:#3b82f6;text-decoration:none;font-weight:600;">审计日志</a> 检查异常。</li>
@@ -682,7 +675,7 @@ if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
                                     <td>
                                         <div class="app-key-box" onclick="copy('<?=$app['app_key']?>')" style="cursor:pointer;" title="点击复制">
                                             <i class="fas fa-key" style="font-size:10px; color:#94a3b8;"></i>
-                                            <span><?=substr($app['app_key'],0,10).'...'?></span>
+                                            <span><?=$app['app_key']?></span>
                                         </div>
                                     </td>
                                     <td><span class="badge badge-primary"><?=number_format($app['card_count'])?> 张</span></td>
@@ -691,12 +684,9 @@ if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
                                         <button type="button" onclick="openEditApp(<?=$app['id']?>, '<?=addslashes($app['app_name'])?>', '<?=addslashes($app['app_version'])?>', '<?=addslashes($app['notes'])?>')" class="btn btn-primary btn-icon" title="编辑"><i class="fas fa-edit"></i></button>
                                         <button type="button" onclick="singleAction('toggle_app', <?=$app['id']?>)" class="btn <?=$app['status']==1?'btn-warning':'btn-secondary'?> btn-icon" title="<?=$app['status']==1?'禁用':'启用'?>"><i class="fas <?=$app['status']==1?'fa-ban':'fa-check'?>"></i></button>
                                         
-                                        <!-- 修改重点：删除按钮逻辑优化 -->
                                         <?php if($app['card_count'] > 0): ?>
-                                            <!-- 如果有卡密，点击提示 -->
                                             <button type="button" onclick="alert('无法删除：该应用下仍有 <?=number_format($app['card_count'])?> 张卡密。\n\n请先进入「卡密库存」，筛选该应用并删除所有卡密后，方可删除应用。')" class="btn btn-secondary btn-icon" style="cursor:pointer; opacity: 0.6;" title="请先清空卡密"><i class="fas fa-trash"></i></button>
                                         <?php else: ?>
-                                            <!-- 如果无卡密，允许删除 -->
                                             <button type="button" onclick="singleAction('delete_app', <?=$app['id']?>)" class="btn btn-danger btn-icon" title="删除"><i class="fas fa-trash"></i></button>
                                         <?php endif; ?>
                                     </td>
@@ -717,7 +707,6 @@ if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
                                 <input type="hidden" name="create_app" value="1">
                                 <label style="display:block;margin-bottom:8px;font-weight:600;font-size:13px;">应用名称</label>
                                 <input type="text" name="app_name" class="form-control" required placeholder="例如: Android 客户端">
-                                <!-- 新增：创建时也可填写版本号 -->
                                 <label style="display:block;margin-bottom:8px;font-weight:600;font-size:13px;">应用版本号</label>
                                 <input type="text" name="app_version" class="form-control" placeholder="例如: v1.0">
                                 <label style="display:block;margin-bottom:8px;font-weight:600;font-size:13px;">备注说明</label>
@@ -740,7 +729,6 @@ if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
                     </details>
                 </div>
                 
-                <!-- 编辑应用弹窗 -->
                 <div id="editAppModal" class="modal">
                     <div class="modal-bg" onclick="closeEditApp()"></div>
                     <div class="modal-content">
@@ -753,7 +741,6 @@ if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
                             <label style="display:block;margin-bottom:8px;font-weight:600;font-size:13px;">应用名称</label>
                             <input type="text" id="edit_app_name" name="app_name" class="form-control" required>
                             
-                            <!-- 新增：版本号编辑字段 -->
                             <label style="display:block;margin-bottom:8px;font-weight:600;font-size:13px;">应用版本号</label>
                             <input type="text" id="edit_app_version" name="app_version" class="form-control">
 
@@ -833,7 +820,6 @@ if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
                     </div>
                 </details>
 
-                <!-- 编辑变量弹窗 -->
                 <div id="editVarModal" class="modal">
                     <div class="modal-bg" onclick="closeEditVar()"></div>
                     <div class="modal-content">
@@ -893,12 +879,10 @@ if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
         <?php endif; ?>
 
         <?php if($tab == 'list'): ?>
-            <!-- [新增] 请选择您要操作的应用 -->
             <div class="panel" style="margin-bottom: 24px;">
                 <div class="panel-head"><span class="panel-title">请选择您要操作的应用</span></div>
                 <div style="padding: 20px;">
                      <select class="form-control" style="margin: 0;" onchange="location.href='?tab=list&app_id='+this.value">
-                        <!-- [修改] 默认选项文字变更为提示选择，且value为空 -->
                         <option value="">-- 请先选择应用 --</option>
                         <?php foreach($appList as $app): ?>
                             <option value="<?=$app['id']?>" <?=($appFilter === $app['id']) ? 'selected' : ''?>><?=htmlspecialchars($app['app_name'])?></option>
@@ -907,7 +891,6 @@ if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
                 </div>
             </div>
 
-            <!-- [修改] 只有当选择了应用(appFilter不为null)或者正在搜索(q参数存在)时，才显示下面的内容 -->
             <?php if ($appFilter !== null || !empty($_GET['q'])): ?>
             
                 <div class="nav-segment" style="margin-bottom: 20px;">

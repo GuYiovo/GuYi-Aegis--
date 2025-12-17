@@ -4,7 +4,7 @@ require_once '../config.php';
 require_once '../database.php';
 
 // 调试标记：确认文件是否更新成功
-header('X-Debug-Version: 2.0'); 
+header('X-Debug-Version: 2.1-Fixed'); 
 header('Content-Type: application/json; charset=utf-8');
 
 // 1. 获取参数
@@ -13,9 +13,15 @@ $data = [];
 if (!empty($json_input)) $data = json_decode($json_input, true) ?? [];
 $data = array_merge($_GET, $_POST, $data);
 
-$card_code = isset($data['card']) ? trim($data['card']) : '';
+// [修复开始] ==========================================================
+// 问题原因：易语言模块发送的是 card_code，而原代码只读取 card。
+// 导致 $card_code 为空，从而误进入了“场景A(获取公开变量)”，返回了200状态码。
+// 修复方法：优先读取 card_code 和 device_hash，兼容旧版参数。
+
+$card_code = !empty($data['card_code']) ? trim($data['card_code']) : (isset($data['card']) ? trim($data['card']) : '');
 $app_key   = isset($data['app_key']) ? trim($data['app_key']) : '';
-$device    = isset($data['device']) ? trim($data['device']) : '';
+$device    = !empty($data['device_hash']) ? trim($data['device_hash']) : (isset($data['device']) ? trim($data['device']) : '');
+// [修复结束] ==========================================================
 
 // 2. 逻辑分流
 try {
@@ -43,6 +49,7 @@ try {
             $variables[$v['key_name']] = $v['value'];
         }
 
+        // [优化] 即使没有变量，只要是获取配置模式，也返回标准结构，避免客户端误判
         if (empty($variables)) {
              echo json_encode(['code' => 200, 'msg' => 'OK', 'data' => ['variables' => null, 'tips' => '连接成功，但该应用下没有公开变量']]);
              exit;
@@ -80,6 +87,7 @@ try {
 
         echo json_encode(['code' => 200, 'msg' => 'OK', 'data' => ['expire_time' => $result['expire_time'], 'variables' => $variables]]);
     } else {
+        // 登录失败，返回 403，客户端将识别为失败
         echo json_encode(['code' => 403, 'msg' => $result['message'], 'data' => null]);
     }
 
