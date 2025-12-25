@@ -4,7 +4,7 @@
  * 包含环境检测、本地化UI、Favicon图标支持、修正跳转逻辑
  * 修改：安装成功后自动删除自身
  */
-error_reporting(0);
+error_reporting(0); // 安装过程不显示PHP错误，减少干扰
 
 // 获取当前步骤
 $step = isset($_GET['step']) ? intval($_GET['step']) : 1;
@@ -30,11 +30,12 @@ function check_env() {
         'info' => extension_loaded('pdo_mysql') ? '已安装' : '未安装',
         'status' => extension_loaded('pdo_mysql')
     ];
-    $is_writable = is_writable(__DIR__);
+    // 使用 DIRECTORY_SEPARATOR 提高跨平台兼容性
+    $is_writable = is_writable(__DIR__ . DIRECTORY_SEPARATOR . 'config.php') || is_writable(__DIR__);
     $results[] = [
         'icon' => '<path d="M11 5h2M12 17v.01M3 11h18M5 11a7 7 0 0114 0v3.18c0 .53.21 1.04.59 1.41l.12.12c.78.78.78 2.05 0 2.83l-.12.12a2.99 2.99 0 01-2.12.88H6.54c-1.11 0-2.08-.63-2.54-1.58l-.27-.55A2.99 2.99 0 014 15.18V11z"/>', 
         'name' => '根目录写入权限',
-        'info' => $is_writable ? '可写' : '不可写 (请设为755)',
+        'info' => $is_writable ? '可写' : '不可写 (请检查目录权限)',
         'status' => $is_writable
     ];
     return $results;
@@ -51,7 +52,7 @@ if ($step == 3 && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if(empty($host) || empty($name) || empty($user)) {
         $msg = "请填写完整信息";
         $msg_type = 'error';
-        $step = 2;
+        $step = 2; // 返回上一步
     } else {
         try {
             $dsn = "mysql:host=$host;port=$port;dbname=$name;charset=utf8mb4";
@@ -59,7 +60,8 @@ if ($step == 3 && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             
             // 生成 config.php 内容
-            $secret = 'SYS_' . md5(uniqid(rand(), true));
+            // 使用 uniqid('', true) 更推荐代替 uniqid(rand(), true)
+            $secret = 'SYS_' . md5(uniqid('', true));
             $config_content = "<?php
 // config.php - System Configuration
 // 此文件存在意味着系统已安装
@@ -92,30 +94,38 @@ define('CARD_TYPES', [
     'year' => ['name' => '年卡', 'duration' => 31536000],
 ]);
 ?>";
-            if (file_put_contents('config.php', $config_content)) {
-                // --- 修改核心逻辑：尝试删除自身 ---
-                $install_file = __FILE__;
-                $deleted = false;
+            // 写入 config.php
+            $config_file_path = __DIR__ . DIRECTORY_SEPARATOR . 'config.php';
+            if (file_put_contents($config_file_path, $config_content)) {
                 
-                // 尝试删除
-                if (@unlink($install_file)) {
-                    $deleted = true;
+                // --- 修改核心逻辑：尝试删除自身 ---
+                $install_file_path = __FILE__;
+                $deleted = false;
+                $delete_error_message = '';
+
+                // 尝试删除 install.php
+                if (!@unlink($install_file_path)) {
+                    // 如果删除失败，尝试重命名
+                    $new_install_file_path = $install_file_path . '.disabled';
+                    if (@rename($install_file_path, $new_install_file_path)) {
+                        $delete_error_message = "无法直接删除 install.php，已将其重命名为 `install.php.disabled`。请务必手动删除或移动此文件以确保安全。";
+                    } else {
+                        $delete_error_message = "系统权限不足，无法自动删除或重命名 `install.php`。<strong>请务必立即手动删除此文件！</strong>否则您的网站随时可能被重置。";
+                    }
                 } else {
-                    // 如果删不掉，降级为改名锁定
-                    @rename($install_file, $install_file . '.lock');
-                    $deleted = false;
+                    $deleted = true;
                 }
                 
                 $step = 3; 
             } else {
-                $msg = "写入失败，请检查目录权限 (config.php)";
+                $msg = "写入配置文件失败，请检查目录权限 (`{$config_file_path}`)";
                 $msg_type = 'error';
-                $step = 2;
+                $step = 2; // 返回上一步
             }
         } catch (PDOException $e) {
             $msg = "数据库连接失败: " . $e->getMessage();
             $msg_type = 'error';
-            $step = 2;
+            $step = 2; // 返回上一步
         }
     }
 }
@@ -243,11 +253,10 @@ $env_pass = !in_array(false, array_column($env_data, 'status'));
                     <strong><i class="fas fa-shield-alt"></i> 安全提示：</strong><br>
                     为了防止系统被二次重置或恶意攻击，安装程序 <code>install.php</code> 已自动删除。
                 </div>
-            <?php else: ?>
+            <?php elseif(isset($delete_error_message) && !empty($delete_error_message)): ?>
                 <div class="delete-notice" style="color:#f87171; border-color: rgba(248, 113, 113, 0.2); background: rgba(248, 113, 113, 0.1);">
                     <strong><i class="fas fa-exclamation-triangle"></i> 重要警告：</strong><br>
-                    系统权限不足，无法自动删除 <code>install.php</code>。<br>
-                    <strong>请务必立即手动删除该文件！</strong>否则您的网站随时可能被重置。
+                    <?php echo $delete_error_message; ?>
                 </div>
             <?php endif; ?>
 

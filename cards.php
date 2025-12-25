@@ -13,10 +13,11 @@ session_start();
 try {
     $db = new Database();
 } catch (Throwable $e) {
+    // [安全修复] 报错信息转义，防止潜在XSS
     die('<div style="font-family:sans-serif;text-align:center;padding:50px;">
         <h2 style="color:#ef4444;">系统连接失败</h2>
         <p>无法连接到数据库，原因如下：</p>
-        <code style="background:#f1f5f9;padding:10px;display:block;margin:20px auto;max-width:600px;border-radius:5px;">'.$e->getMessage().'</code>
+        <code style="background:#f1f5f9;padding:10px;display:block;margin:20px auto;max-width:600px;border-radius:5px;">'.htmlspecialchars($e->getMessage()).'</code>
         <p>请检查 config.php 配置或数据库服务状态。</p>
     </div>');
 }
@@ -43,7 +44,7 @@ try {
     $adminHashFingerprint = md5((string)$rawHash);
 
 } catch (Throwable $e) {
-    die("系统初始化异常: " . $e->getMessage());
+    die("系统初始化异常: " . htmlspecialchars($e->getMessage()));
 }
 
 function verifyCSRF() {
@@ -77,7 +78,7 @@ try {
     $appList = $db->getApps(); 
 } catch (Throwable $e) {
     $appList = []; 
-    if(isset($_SESSION['admin_logged_in'])) $errorMsg = "应用列表加载异常: " . $e->getMessage();
+    if(isset($_SESSION['admin_logged_in'])) $errorMsg = "应用列表加载异常: " . htmlspecialchars($e->getMessage());
 }
 
 // --- 业务逻辑 ---
@@ -110,6 +111,8 @@ if (isset($_GET['logout'])) {
 
 if (!isset($_SESSION['admin_logged_in']) && $is_trusted) {
     $_SESSION['admin_logged_in'] = true;
+    // [安全修复] 自动登录也需要重置Session ID
+    session_regenerate_id(true);
     $_SESSION['last_ip'] = $_SERVER['REMOTE_ADDR'];
 }
 
@@ -133,6 +136,9 @@ if (!isset($_SESSION['admin_logged_in'])) {
         if (!$error) {
             $hash = $db->getAdminHash();
             if (!empty($hash) && password_verify($_POST['password'], $hash)) {
+                // [安全修复] 防止会话固定攻击
+                session_regenerate_id(true);
+                
                 $_SESSION['admin_logged_in'] = true;
                 $_SESSION['last_ip'] = $_SERVER['REMOTE_ADDR'];
                 
@@ -155,50 +161,295 @@ if (!isset($_SESSION['admin_logged_in'])) {
     }
 }
 
-if (!isset($_SESSION['admin_logged_in'])): ?>
+if (!isset($_SESSION['admin_logged_in'])): 
+    // 检测是否为移动端
+    $is_mobile = preg_match("/(android|avantgo|blackberry|bolt|boost|cricket|docomo|fone|hiptop|mini|mobi|palm|phone|pie|samsung|scp|wap|windows ce;iemobile|xhtml\\+xml)/i", $_SERVER["HTTP_USER_AGENT"]);
+    // 根据设备选择背景图
+    $bg_img = $is_mobile ? 'backend/pjt.png' : 'backend/pcpjt.png';
+?>
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>系统登录 - Enterprise Admin</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>登录 - GuYi Admin</title>
+    <!-- 已加回 Favicon -->
+    <link rel="icon" href="backend/logo.png" type="image/png">
     <style>
-        body { margin:0; font-family:'Inter',sans-serif; background:#0f172a; height:100vh; display:flex; align-items:center; justify-content:center; overflow:hidden; }
-        .bg-glow { position:absolute; width:600px; height:600px; background:radial-gradient(circle, rgba(56,189,248,0.15) 0%, rgba(0,0,0,0) 70%); top:50%; left:50%; transform:translate(-50%, -50%); pointer-events:none; }
-        .login-box { position:relative; width:90%; max-width:400px; padding:30px; background:rgba(30,41,59,0.7); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.1); border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5); text-align:center; color:white; }
-        .logo-img { width:64px; height:64px; border-radius:16px; margin:0 auto 20px; display:block; box-shadow:0 10px 15px -3px rgba(0,0,0,0.3); border: 2px solid rgba(255,255,255,0.1); }
-        h1 { font-size:20px; margin:0 0 8px; font-weight:600; }
-        p { color:#94a3b8; font-size:14px; margin:0 0 30px; }
-        .input-group { margin-bottom: 20px; text-align: left; }
-        input { width:100%; padding:12px 16px; background:rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.1); border-radius:8px; color:white; font-size:14px; outline:none; transition:0.2s; box-sizing:border-box; }
-        input:focus { border-color:#3b82f6; background:rgba(0,0,0,0.4); box-shadow:0 0 0 3px rgba(59,130,246,0.2); }
-        button { width:100%; padding:12px; background:#3b82f6; border:none; border-radius:8px; color:white; font-weight:600; cursor:pointer; transition:0.2s; font-size:14px; }
-        button:hover { background:#2563eb; transform:translateY(-1px); }
-        .error { color:#ef4444; font-size:13px; margin-bottom:15px; background:rgba(239,68,68,0.1); padding:8px; border-radius:6px; }
-        .captcha-row { display: flex; gap: 10px; }
-        .captcha-img { border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; height: 43px; width: 100px; flex-shrink: 0; }
-        .trust-badge { display: inline-block; font-size: 11px; background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 2px 8px; border-radius: 10px; margin-bottom: 20px; border: 1px solid rgba(16, 185, 129, 0.3); }
+        /* --- auth.css 内容嵌入 --- */
+        :root {
+            --ay-accent-start: #ff7dc6; /* 霓虹起色 */
+            --ay-accent-end: #7aa8ff; /* 霓虹终色 */
+            --ay-text: #f3f6ff; /* 主文字 */
+            --ay-sub: #b9c3e6; /* 次文字 */
+            --ay-card: rgba(12, 14, 28, .55); /* 卡片深玻璃 */
+            --ay-stroke: rgba(255, 255, 255, .18); /* 细边 */
+            --ay-input: rgba(255, 255, 255, .06); /* 输入框底 */
+            --ay-input-h: 48px; /* 输入高度 */
+            --ay-radius: 20px; /* 圆角 */
+        }
+
+        html, body { height: 100%; }
+        *, *::before, *::after { box-sizing: border-box; }
+
+        body.ay-bg {
+            margin: 0;
+            color: var(--ay-text);
+            font-family: ui-sans-serif, -apple-system, Segoe UI, Roboto, PingFang SC, Microsoft YaHei, system-ui, Arial;
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            overflow-x: hidden;
+        }
+
+        .ay-dim {
+            position: fixed; inset: 0; pointer-events: none;
+            background: radial-gradient(60% 50% at 50% 30%, rgba(0, 0, 0, .25), rgba(0, 0, 0, .55) 70%);
+        }
+
+        .ay-petals { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+        .ay-petals i {
+            position: absolute; width: 12px; height: 10px;
+            background: linear-gradient(135deg, #ffd1e6, #ff9aca);
+            border-radius: 80% 80% 80% 20% / 80% 80% 20% 80%;
+            opacity: .5; filter: blur(.2px);
+            animation: ay-fall linear infinite; transform: rotate(20deg);
+        }
+        .ay-petals i:nth-child(3n) { width: 9px; height: 7px; animation-duration: 12s; }
+        .ay-petals i:nth-child(4n) { animation-duration: 10s; opacity: .35; }
+        .ay-petals i:nth-child(5n) { width: 14px; height: 12px; animation-duration: 14s; }
+        @keyframes ay-fall { to { transform: translateY(110vh) rotate(360deg); } }
+
+        .ay-wrap {
+            min-height: 100dvh; display: grid; place-items: center;
+            padding: clamp(16px, 4vw, 32px); perspective: 1000px;
+        }
+
+        .ay-card {
+            width: min(480px, 92vw); margin-top: 14px;
+            background: var(--ay-card); backdrop-filter: blur(16px) saturate(140%);
+            border: 1px solid var(--ay-stroke); border-radius: 24px;
+            box-shadow: 0 18px 60px rgba(5, 9, 20, .45);
+            position: relative; overflow: hidden; transform-style: preserve-3d;
+            transition: box-shadow .25s ease; will-change: transform;
+        }
+        .ay-card:hover { box-shadow: 0 24px 80px rgba(5,9,20,.55); }
+        .ay-card::after{
+            content:""; position:absolute; inset:-1px; border-radius:inherit; pointer-events:none; mix-blend-mode:overlay; opacity:0; transition: opacity .3s ease;
+            background: radial-gradient(300px 300px at var(--mx, 50%) var(--my, 50%), rgba(255,255,255,.15), rgba(255,255,255,0) 60%); z-index: 10;
+        }
+        .ay-card:hover::after{ opacity:1; }
+        .ay-card::before {
+            content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1px;
+            background: conic-gradient(from 200deg, var(--ay-accent-start), var(--ay-accent-end), var(--ay-accent-start));
+            -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            -webkit-mask-composite: xor; mask-composite: exclude;
+            opacity: .7; pointer-events: none;
+        }
+
+        .ay-head { padding: 26px 22px 8px; display: grid; place-items: center; row-gap: 8px; }
+        .ay-logo {
+            width: 64px; height: 64px; border-radius: 50%;
+            background: url("backend/logo.png") no-repeat center/contain;
+            box-shadow: 0 8px 26px rgba(255, 154, 202, .25);
+        }
+        .ay-title { margin: 4px 0 0; font-weight: 900; letter-spacing: .6px; font-size: clamp(18px, 2.6vw, 22px); color: white; }
+        .ay-sub { margin: 0 0 6px; color: var(--ay-sub); font-size: 12px; text-align: center; }
+
+        .ay-body { padding: 16px 22px 22px; }
+        .ay-field { position: relative; margin: 16px 0 22px; }
+        .ay-input {
+            width: 100%; height: var(--ay-input-h); padding: 12px 14px; border-radius: 16px;
+            border: 1px solid var(--ay-stroke); background: var(--ay-input); color: var(--ay-text);
+            outline: none; transition: all .18s ease;
+        }
+        .ay-input:-webkit-autofill {
+            -webkit-text-fill-color: var(--ay-text) !important;
+            transition: background-color 5000s ease-in-out 0s;
+            box-shadow: inset 0 0 0 1000px rgba(255, 255, 255, 0.06) !important;
+        }
+        .ay-input::placeholder { color: transparent; }
+        .ay-label {
+            position: absolute; left: 14px; top: 50%; transform: translateY(-52%);
+            font-size: 13px; color: var(--ay-sub); pointer-events: none;
+            transition: all .2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .ay-input:focus {
+            border-color: rgba(255, 255, 255, .38);
+            box-shadow: 0 0 0 3px rgba(255, 125, 198, .18);
+            background: rgba(255, 255, 255, .08);
+        }
+        .ay-input:focus + .ay-label, .ay-input:not(:placeholder-shown) + .ay-label {
+            top: -9px; font-size: 11px; background: rgba(10, 12, 24, .95);
+            padding: 0 8px; border-radius: 999px; color: #e9eaff;
+            border: 1px solid rgba(255, 255, 255, .15); transform: translateY(0);
+        }
+
+        .ay-eye {
+            position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+            width: 34px; height: 34px; border-radius: 10px; border: 1px solid transparent;
+            background: transparent; display: grid; place-items: center; cursor: pointer; transition: background .2s;
+        }
+        .ay-eye:hover { background: rgba(255,255,255,0.1); }
+        .ay-eye svg { transition: stroke .3s ease; }
+
+        /* 验证码图片样式 */
+        .ay-captcha-img {
+            position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+            height: 36px; border-radius: 10px; cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.1); opacity: 0.85; transition: opacity .2s;
+        }
+        .ay-captcha-img:hover { opacity: 1; }
+
+        .ay-btn {
+            width: 100%; height: 48px; border: none; border-radius: 14px; cursor: pointer;
+            color: #ffffff; font-weight: 900; letter-spacing: .5px; margin-top: 10px;
+            background: linear-gradient(135deg, #ffb6f0, #9ad6ff);
+            box-shadow: 0 12px 30px rgba(122, 168, 255, .35), inset 0 1px 0 rgba(255, 255, 255, .7);
+            position: relative; overflow: hidden; transition: transform .1s ease, box-shadow .2s ease, filter .2s;
+        }
+        .ay-btn:hover { 
+            transform: translateY(-2px); 
+            box-shadow: 0 16px 36px rgba(122,168,255,.45), inset 0 1px 0 rgba(255,255,255,.8); 
+        }
+        .ay-btn:active { 
+            transform: translateY(1px) scale(0.98); filter: brightness(0.95);
+        }
+        .ay-btn::after{ 
+            content:""; position:absolute; top:-20%; bottom:-20%; left:-40%; right:-40%; pointer-events:none;
+            background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.4) 50%, rgba(255,255,255,0) 100%);
+            transform: translateX(-120%) skewX(-20deg); transition: transform .6s ease;
+        }
+        .ay-btn:hover::after{ transform: translateX(140%) skewX(-20deg); }
+
+        .ay-foot { margin: 12px 0 8px; text-align: center; color: #dfe6ff; font-size: 12px; opacity: .7; transition: opacity .2s; }
+        .ay-foot:hover { opacity: 1; }
+        
+        .ay-error {
+            background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5; font-size: 12px; padding: 8px 12px; border-radius: 12px;
+            margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
+        }
+
+        @media (max-width: 480px) {
+            :root { --ay-input-h: 46px; }
+            .ay-body { padding: 12px 16px 18px; }
+            .ay-card { transform: none !important; }
+        }
     </style>
 </head>
-<body>
-    <div class="bg-glow"></div>
-    <div class="login-box">
-        <img src="backend/logo.png" alt="Logo" class="logo-img">
-        <h1>管理控制台</h1>
-        <?php if($is_trusted): ?><div class="trust-badge">✓ 本机已通过安全验证</div><?php else: ?><p>Protected System Access</p><?php endif; ?>
-        <?php if(isset($login_error)) echo "<div class='error'>{$login_error}</div>"; ?>
-        <form method="POST">
-            <div class="input-group"><input type="password" name="password" placeholder="请输入管理员密钥" required autofocus></div>
-            <?php if(!$is_trusted): ?>
-            <div class="input-group captcha-row">
-                <input type="text" name="captcha" placeholder="验证码" maxlength="4" required autocomplete="off" style="text-align: center;">
-                <img src="Verifyfile/captcha.php" class="captcha-img" onclick="this.src='Verifyfile/captcha.php?t='+Math.random()" title="点击刷新">
-            </div>
+<body class="ay-bg">
+<script>
+    // 离线模式：智能检测设备并设置壁纸
+    (function(){
+        var bgUrl = '<?php echo $bg_img; ?>';
+        var gradient = 'linear-gradient(180deg, rgb(255 255 255 / 0%), rgb(255 255 255 / 71%))';
+        document.body.style.backgroundImage = gradient + ", url('" + bgUrl + "')";
+    })();
+</script>
+
+<div class="ay-dim" aria-hidden="true"></div>
+<div class="ay-petals" aria-hidden="true">
+    <i style="left:6%; top:-8vh; animation-duration:11s"></i>
+    <i style="left:24%; top:-12vh; animation-duration:13s"></i>
+    <i style="left:52%; top:-16vh; animation-duration:12s"></i>
+    <i style="left:72%; top:-10vh; animation-duration:10s"></i>
+    <i style="left:86%; top:-18vh; animation-duration:14s"></i>
+</div>
+
+<main class="ay-wrap">
+    <section class="ay-card" id="ay-card" role="dialog" aria-labelledby="ay-title" aria-describedby="ay-sub">
+        <header class="ay-head">
+            <div class="ay-logo" aria-hidden="true"></div>
+            <h1 id="ay-title" class="ay-title">欢迎回来，指挥官</h1>
+            <p id="ay-sub" class="ay-sub">正在验证您的管理员身份</p>
+        </header>
+
+        <div class="ay-body">
+            <?php if(isset($login_error)): ?>
+                <div class="ay-error">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    <?php echo $login_error; ?>
+                </div>
             <?php endif; ?>
-            <button type="submit">立即进入 &rarr;</button>
-        </form>
-    </div>
+
+            <form id="ay-form" method="POST">
+                <!-- 管理员密钥输入 (原邮箱) -->
+                <div class="ay-field">
+                    <input id="ay-user" name="password" class="ay-input" type="password" placeholder=" "
+                           autocomplete="current-password" required style="padding-right: 44px;">
+                    <span class="ay-label">管理员密钥</span>
+                    <button type="button" class="ay-eye" id="ay-eye" aria-label="显示密钥">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#cfe1ff" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- 验证码输入 (原密码) -->
+                <?php if(!$is_trusted): ?>
+                <div class="ay-field">
+                    <input id="ay-captcha" name="captcha" class="ay-input" type="text" placeholder=" "
+                           autocomplete="off" required maxlength="4" style="padding-right: 120px;">
+                    <span class="ay-label">验证码</span>
+                    <img src="Verifyfile/captcha.php" class="ay-captcha-img" onclick="this.src='Verifyfile/captcha.php?t='+Math.random()" title="点击刷新">
+                </div>
+                <?php endif; ?>
+
+                <button class="ay-btn" type="submit" id="ay-submit">立即进入</button>
+            </form>
+            <div class="ay-foot">© GuYi Aegis Pro System</div>
+        </div>
+    </section>
+</main>
+
+<script>
+    // 交互优化脚本
+    document.addEventListener('DOMContentLoaded', () => {
+        // 1. 密钥显示/隐藏切换
+        const passInput = document.getElementById('ay-user');
+        const eyeBtn = document.getElementById('ay-eye');
+        if(eyeBtn && passInput) {
+            const eyeIcon = eyeBtn.querySelector('svg');
+            eyeBtn.addEventListener('click', () => {
+                const isPassword = passInput.type === 'password';
+                passInput.type = isPassword ? 'text' : 'password';
+                eyeIcon.style.stroke = isPassword ? '#ff7dc6' : '#cfe1ff';
+            });
+        }
+
+        // 2. 卡片 3D 视差与光照追踪效果
+        const card = document.getElementById('ay-card');
+        const wrap = document.querySelector('.ay-wrap');
+
+        wrap.addEventListener('mousemove', (e) => {
+            if (window.innerWidth <= 768) return; // 移动端禁用
+
+            const rect = card.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            // 设置光标位置变量，用于CSS光照
+            card.style.setProperty('--mx', `${x}px`);
+            card.style.setProperty('--my', `${y}px`);
+
+            // 计算旋转角度 (轻微视差)
+            const rotateX = ((e.clientY - window.innerHeight / 2) / window.innerHeight) * -4;
+            const rotateY = ((e.clientX - window.innerWidth / 2) / window.innerWidth) * 4;
+            
+            card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+        });
+
+        // 鼠标离开复位
+        wrap.addEventListener('mouseleave', () => {
+            card.style.transform = 'perspective(1000px) rotateX(0) rotateY(0)';
+            card.style.setProperty('--mx', '50%');
+            card.style.setProperty('--my', '50%');
+        });
+    });
+</script>
 </body>
 </html>
 <?php exit; endif; ?>
@@ -230,7 +481,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->createApp(htmlspecialchars($appName), htmlspecialchars($_POST['app_version'] ?? ''), htmlspecialchars($_POST['app_notes']));
             $msg = "应用「".htmlspecialchars($appName)."」创建成功！";
             $appList = $db->getApps();
-        } catch (Exception $e) { $errorMsg = $e->getMessage(); }
+        } catch (Exception $e) { $errorMsg = htmlspecialchars($e->getMessage()); }
     } elseif (isset($_POST['toggle_app'])) {
         $db->toggleAppStatus($_POST['app_id']);
         $msg = "应用状态已更新";
@@ -240,7 +491,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->deleteApp($_POST['app_id']);
             $msg = "应用已删除";
             $appList = $db->getApps();
-        } catch (Exception $e) { $errorMsg = $e->getMessage(); }
+        } catch (Exception $e) { $errorMsg = htmlspecialchars($e->getMessage()); }
     } elseif (isset($_POST['edit_app'])) { 
         try {
             $appId = intval($_POST['app_id']);
@@ -249,7 +500,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->updateApp($appId, htmlspecialchars($appName), htmlspecialchars($_POST['app_version'] ?? ''), htmlspecialchars($_POST['app_notes']));
             $msg = "应用信息已更新";
             $appList = $db->getApps();
-        } catch (Exception $e) { $errorMsg = $e->getMessage(); }
+        } catch (Exception $e) { $errorMsg = htmlspecialchars($e->getMessage()); }
     }
     elseif (isset($_POST['add_var'])) {
         try {
@@ -260,7 +511,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (empty($varKey)) throw new Exception("变量名不能为空");
             $db->addAppVariable($varAppId, htmlspecialchars($varKey), htmlspecialchars($varVal), $varPub);
             $msg = "变量「".htmlspecialchars($varKey)."」添加成功";
-        } catch (Exception $e) { $errorMsg = $e->getMessage(); }
+        } catch (Exception $e) { $errorMsg = htmlspecialchars($e->getMessage()); }
     }
     elseif (isset($_POST['edit_var'])) {
         try {
@@ -271,7 +522,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (empty($varKey)) throw new Exception("变量名不能为空");
             $db->updateAppVariable($varId, htmlspecialchars($varKey), htmlspecialchars($varVal), $varPub);
             $msg = "变量更新成功";
-        } catch (Exception $e) { $errorMsg = $e->getMessage(); }
+        } catch (Exception $e) { $errorMsg = htmlspecialchars($e->getMessage()); }
     }
     elseif (isset($_POST['del_var'])) {
         $db->deleteAppVariable($_POST['var_id']);
@@ -293,7 +544,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $targetAppId = intval($_POST['app_id']);
             $db->generateCards($_POST['num'], $_POST['type'], $_POST['pre'], '', 16, htmlspecialchars($_POST['note']), $targetAppId);
             $msg = "成功生成 {$_POST['num']} 张卡密";
-        } catch (Exception $e) { $errorMsg = "生成失败: " . $e->getMessage(); }
+        } catch (Exception $e) { $errorMsg = "生成失败: " . htmlspecialchars($e->getMessage()); }
     } elseif (isset($_POST['del_card'])) {
         $db->deleteCard($_POST['id']);
         $msg = "卡密已删除";
@@ -376,7 +627,7 @@ try {
         $totalCards = 0;
         $cardList = [];
     }
-} catch (Throwable $e) { $errorMsg .= " 卡密列表加载失败: " . $e->getMessage(); }
+} catch (Throwable $e) { $errorMsg .= " 卡密列表加载失败: " . htmlspecialchars($e->getMessage()); }
 
 $totalPages = ceil($totalCards / $perPage);
 if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
@@ -571,7 +822,7 @@ if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
                             <span style="font-size: 11px; background: #3b82f6; color: white; padding: 2px 8px; border-radius: 10px; font-weight: 500;">NEW</span>
                         </div>
                         <div style="font-size: 14px; color: #475569; line-height: 1.6;">
-                            欢迎使用 <b>GuYi Aegis Pro</b> 企业级验证管理系统。当前系统版本已更新至 V12.1。<br>
+                            欢迎使用 <b>GuYi Aegis Pro</b> 企业级验证管理系统。当前系统版本已更新至 V14.0。<br>
                             <ul style="margin: 5px 0 0 0; padding-left: 20px;">
                                 <li>QQ群562807728</li>
                                 <li>有bug可以进去反馈 <a href="?tab=logs" style="color:#3b82f6;text-decoration:none;font-weight:600;">审计日志</a> 检查异常。</li>
@@ -627,7 +878,7 @@ if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
                             <tr>
                                 <td><?php if($dev['app_id']>0): ?><span class="app-tag"><?=htmlspecialchars($dev['app_name'])?></span><?php else: ?><span style="color:#94a3b8;font-size:12px;">未分类</span><?php endif; ?></td>
                                 <td><span class="code"><?php echo $dev['card_code']; ?></span></td>
-                                <td style="font-family:'JetBrains Mono'; font-size:12px; color:#64748b;"><?php echo substr($dev['device_hash'],0,12).'...'; ?></td>
+                                <td style="font-family:'JetBrains Mono'; font-size:12px; color:#64748b;"><?php echo htmlspecialchars(substr($dev['device_hash'],0,12)).'...'; // [安全修复] XSS ?></td>
                                 <td><?php echo date('H:i', strtotime($dev['activate_time'])); ?></td>
                                 <td><span class="badge badge-success"><?php echo date('m-d H:i', strtotime($dev['expire_time'])); ?></span></td>
                             </tr>
@@ -775,7 +1026,7 @@ if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
                                         echo "<td><div class='app-key-box' style='max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'>".htmlspecialchars($v['value'])."</div></td>";
                                         echo "<td>".($v['is_public'] ? '<span class="badge badge-success">公开</span>' : '<span class="badge badge-warn">私有</span>')."</td>";
                                         echo "<td>
-                                            <button type='button' onclick=\"openEditVar({$v['id']}, '".addslashes($v['key_name'])."', '".addslashes($v['value'])."', {$v['is_public']})\" class='btn btn-primary btn-icon' title='编辑'><i class='fas fa-edit'></i></button>
+                                            <button type='button' onclick=\"openEditVar({$v['id']}, '".addslashes($v['key_name'])."', '".str_replace(array("\r\n", "\r", "\n"), '\n', addslashes($v['value']))."', {$v['is_public']})\" class='btn btn-primary btn-icon' title='编辑'><i class='fas fa-edit'></i></button>
                                             <button type='button' onclick=\"singleAction('del_var', {$v['id']}, 'var_id')\" class='btn btn-danger btn-icon' title='删除'><i class='fas fa-trash'></i></button>
                                         </td>";
                                         echo "</tr>";
@@ -1055,10 +1306,23 @@ if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
                             <?php foreach($logs as $log): ?>
                             <tr>
                                 <td style="color:#64748b;font-size:12px;"><?=date('m-d H:i',strtotime($log['access_time']))?></td>
-                                <td><span class="app-tag" style="font-size:10px;"><?=htmlspecialchars($log['app_name']?:'-')?></span></td>
+                                <td><span class="app-tag" style="font-size:10px;"><?=htmlspecialchars($log['app_name']?:'-')?></td>
                                 <td><span class="code" style="font-size:11px;"><?=substr($log['card_code'],0,10).'...'?></span></td>
-                                <td style="font-size:11px;"><?=substr($log['ip_address'],0,15)?><br><span style="color:#94a3b8;"><?=substr($log['device_hash'],0,6)?></span></td>
-                                <td><?php $res=$log['result']; echo (strpos($res,'成功')!==false||strpos($res,'活跃')!==false)?'<span class="badge badge-success" style="font-size:10px;">成功</span>':((strpos($res,'失败')!==false)?'<span class="badge badge-danger" style="font-size:10px;">失败</span>':'<span class="badge badge-neutral" style="font-size:10px;">'.$res.'</span>'); ?></td>
+                                <td style="font-size:11px;">
+                                    <?=htmlspecialchars(substr($log['ip_address'],0,15)) // [安全修复] XSS?><br>
+                                    <span style="color:#94a3b8;"><?=htmlspecialchars(substr($log['device_hash'],0,6)) // [安全修复] XSS?></span>
+                                </td>
+                                <td>
+                                    <?php 
+                                    $res=$log['result']; 
+                                    // [安全修复] XSS - 转义$res
+                                    echo (strpos($res,'成功')!==false||strpos($res,'活跃')!==false)?
+                                        '<span class="badge badge-success" style="font-size:10px;">成功</span>' : 
+                                        ((strpos($res,'失败')!==false)?
+                                            '<span class="badge badge-danger" style="font-size:10px;">失败</span>' : 
+                                            '<span class="badge badge-neutral" style="font-size:10px;">'.htmlspecialchars($res).'</span>'); 
+                                    ?>
+                                </td>
                             </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -1215,7 +1479,7 @@ if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
                 window.location.href = '?tab=dashboard';
             } else {
                 // 如果关闭的是别的标签，只刷新 UI（这里简单起见刷新页面，或者用 JS 重新渲染）
-                // 为了简单且不跳页，我们直接移除 DOM 元素并重新渲染上面的 HTML 逻辑即可
+                // 为了简单且不跳页，我们直接移除 DOM 元素并重新渲染上面的 HTML 逻辑即可。
                 // 但因为是服务端渲染，点击其他标签会刷新。这里我们简单重绘 DOM 即可。
                 e.target.closest('.chrome-tab').remove();
             }
