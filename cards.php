@@ -824,7 +824,7 @@ if ($totalPages > 0 && $page > $totalPages) { $page = $totalPages; }
                         <div style="font-size: 14px; color: #475569; line-height: 1.6;">
                             欢迎使用 <b>GuYi Aegis Pro</b> 企业级验证管理系统。当前系统版本已更新至 V14.0。<br>
                             <ul style="margin: 5px 0 0 0; padding-left: 20px;">
-                                <li>QQ群562807728</li>
+                                <li>官方群：1077643184</li>
                                 <li>有bug可以进去反馈 <a href="?tab=logs" style="color:#3b82f6;text-decoration:none;font-weight:600;">审计日志</a> 检查异常。</li>
                             </ul>
                         </div>

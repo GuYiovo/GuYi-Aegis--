@@ -14,7 +14,6 @@ README.md
 </p>
 
 ---
-
 ## 📖 产品概述
 
 **GuYi Aegis Pro v14.0 Enterprise** 是一套专为独立开发者与中小微企业打造的 **高并发、低延迟** 软件授权分发解决方案。
@@ -87,4 +86,5 @@ v14.0 采用纯 API 架构与 MySQL 存储，目录结构更加精简。请确�
 ├── config.php            # 系统核心配置文件 (包含数据库连接信息，安装后自动生成)
 └── database.php          # 数据库操作核心类 (封装 PDO_MySQL 所有交互逻辑)
 
+官方群1077643184
 Copyright © 2026 GuYi Aegis Pro. All Rights Reserved.
