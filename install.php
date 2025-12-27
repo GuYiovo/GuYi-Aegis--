@@ -1,15 +1,14 @@
 <?php
-/**
- * System Installer Wizard
- * 包含环境检测、本地化UI、Favicon图标支持、修正跳转逻辑
- * 修改：安装成功后自动删除自身
- */
 error_reporting(0); // 安装过程不显示PHP错误，减少干扰
 
 // 获取当前步骤
 $step = isset($_GET['step']) ? intval($_GET['step']) : 1;
 $msg = '';
 $msg_type = ''; 
+
+// 检测设备类型 (用于背景图)
+$is_mobile_client = preg_match("/(android|avantgo|blackberry|bolt|boost|cricket|docomo|fone|hiptop|mini|mobi|palm|phone|pie|samsung|scp|wap|windows ce;iemobile|xhtml\\+xml)/i", $_SERVER["HTTP_USER_AGENT"]);
+$bg_url = $is_mobile_client ? 'backend/pjt.png' : 'backend/pcpjt.png';
 
 // ----------------------
 // 核心逻辑区域
@@ -30,7 +29,6 @@ function check_env() {
         'info' => extension_loaded('pdo_mysql') ? '已安装' : '未安装',
         'status' => extension_loaded('pdo_mysql')
     ];
-    // 使用 DIRECTORY_SEPARATOR 提高跨平台兼容性
     $is_writable = is_writable(__DIR__ . DIRECTORY_SEPARATOR . 'config.php') || is_writable(__DIR__);
     $results[] = [
         'icon' => '<path d="M11 5h2M12 17v.01M3 11h18M5 11a7 7 0 0114 0v3.18c0 .53.21 1.04.59 1.41l.12.12c.78.78.78 2.05 0 2.83l-.12.12a2.99 2.99 0 01-2.12.88H6.54c-1.11 0-2.08-.63-2.54-1.58l-.27-.55A2.99 2.99 0 014 15.18V11z"/>', 
@@ -59,8 +57,6 @@ if ($step == 3 && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo = new PDO($dsn, $user, $pass);
             $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             
-            // 生成 config.php 内容
-            // 使用 uniqid('', true) 更推荐代替 uniqid(rand(), true)
             $secret = 'SYS_' . md5(uniqid('', true));
             $config_content = "<?php
 // config.php - System Configuration
@@ -94,18 +90,14 @@ define('CARD_TYPES', [
     'year' => ['name' => '年卡', 'duration' => 31536000],
 ]);
 ?>";
-            // 写入 config.php
             $config_file_path = __DIR__ . DIRECTORY_SEPARATOR . 'config.php';
             if (file_put_contents($config_file_path, $config_content)) {
                 
-                // --- 修改核心逻辑：尝试删除自身 ---
                 $install_file_path = __FILE__;
                 $deleted = false;
                 $delete_error_message = '';
 
-                // 尝试删除 install.php
                 if (!@unlink($install_file_path)) {
-                    // 如果删除失败，尝试重命名
                     $new_install_file_path = $install_file_path . '.disabled';
                     if (@rename($install_file_path, $new_install_file_path)) {
                         $delete_error_message = "无法直接删除 install.php，已将其重命名为 `install.php.disabled`。请务必手动删除或移动此文件以确保安全。";
@@ -139,32 +131,55 @@ $env_pass = !in_array(false, array_column($env_data, 'status'));
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>系统初始化安装</title>
-    <!-- Favicon -->
     <link rel="shortcut icon" href="backend/logo.png" type="image/png">
     <style>
         :root {
             --bg-dark: #0f172a;
-            --card-bg: rgba(30, 41, 59, 0.75);
+            --card-bg: rgba(15, 23, 42, 0.65); /* 半透明背景 */
             --primary: #3b82f6;
             --primary-hover: #2563eb;
             --text-main: #f1f5f9;
             --text-sub: #94a3b8;
-            --border: rgba(255, 255, 255, 0.08);
+            --border: rgba(255, 255, 255, 0.15);
             --success: #10b981;
             --error: #ef4444;
         }
         body {
             margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: var(--bg-dark);
-            background-image: radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%), radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.15) 0px, transparent 50%);
-            background-attachment: fixed; color: var(--text-main);
+            /* 背景图逻辑 */
+            background-image: url('<?php echo $bg_url; ?>');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            color: var(--text-main);
             display: flex; justify-content: center; align-items: center; min-height: 100vh;
+            overflow: hidden;
         }
+        
+        /* 飘落特效 CSS */
+        .ay-petals { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 1; }
+        .ay-petals i {
+            position: absolute; width: 12px; height: 10px;
+            /* 修改为樱花色渐变 */
+            background: linear-gradient(135deg, #ffd1e6, #ff9aca); 
+            border-radius: 80% 80% 80% 20% / 80% 80% 20% 80%;
+            opacity: .5; filter: blur(.2px);
+            animation: ay-fall linear infinite; transform: rotate(20deg);
+        }
+        .ay-petals i:nth-child(3n) { width: 9px; height: 7px; animation-duration: 12s; }
+        .ay-petals i:nth-child(4n) { animation-duration: 10s; opacity: .35; }
+        .ay-petals i:nth-child(5n) { width: 14px; height: 12px; animation-duration: 14s; }
+        @keyframes ay-fall { to { transform: translateY(110vh) rotate(360deg); } }
+
         .container {
             width: 100%; max-width: 460px; background: var(--card-bg);
-            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            /* 高斯模糊 */
+            backdrop-filter: blur(20px) saturate(140%);
+            -webkit-backdrop-filter: blur(20px) saturate(140%);
             border: 1px solid var(--border); border-radius: 20px;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); padding: 40px;
+            position: relative; z-index: 10;
         }
         .header { text-align: center; margin-bottom: 35px; }
         .logo { font-size: 24px; font-weight: 700; background: linear-gradient(135deg, #60a5fa, #a78bfa); -webkit-background-clip: text; color: transparent; margin-bottom: 8px; display: inline-block; }
@@ -197,6 +212,16 @@ $env_pass = !in_array(false, array_column($env_data, 'status'));
     </style>
 </head>
 <body>
+
+<!-- 飘落特效容器 -->
+<div class="ay-petals" aria-hidden="true">
+    <i style="left:6%; top:-8vh; animation-duration:11s"></i>
+    <i style="left:24%; top:-12vh; animation-duration:13s"></i>
+    <i style="left:52%; top:-16vh; animation-duration:12s"></i>
+    <i style="left:72%; top:-10vh; animation-duration:10s"></i>
+    <i style="left:86%; top:-18vh; animation-duration:14s"></i>
+</div>
+
 <div class="container">
     <div class="header">
         <div class="logo">System Initialization</div>
@@ -247,7 +272,6 @@ $env_pass = !in_array(false, array_column($env_data, 'status'));
             <h2>安装成功!</h2>
             <p style="color:var(--text-sub);font-size:14px; margin-bottom: 20px;">系统已就绪，配置文件已锁定。</p>
             
-            <!-- 显示文件删除状态，防止用户疑惑 -->
             <?php if(isset($deleted) && $deleted): ?>
                 <div class="delete-notice" style="color:#34d399; border-color: rgba(52, 211, 153, 0.2); background: rgba(52, 211, 153, 0.1);">
                     <strong><i class="fas fa-shield-alt"></i> 安全提示：</strong><br>

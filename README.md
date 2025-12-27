@@ -2,11 +2,11 @@ README.md
 # 🛡️ GuYi Aegis Pro - 企业级验证管理系统
 
 > **📚 官方文档**: [**https://aegis.可爱.top/**](https://aegis.可爱.top/)  
-> *(提示：v14.0 Enterprise 架构已全新升级，为了获得最佳的对接体验，请务必优先查阅官方文档)*
+> *(提示：v15.0 Enterprise 架构已全新升级，为了获得最佳的对接体验，请务必优先查阅官方文档)*
 
 <p align="left">
   <a href="https://aegis.可爱.top/">
-    <img src="https://img.shields.io/badge/Version-v14.0_Enterprise-6366f1.svg?style=flat-square&logo=github&logoColor=white" alt="Version">
+    <img src="https://img.shields.io/badge/Version-v15.0_Enterprise-6366f1.svg?style=flat-square&logo=github&logoColor=white" alt="Version">
   </a>
   <img src="https://img.shields.io/badge/Database-MySQL_High_Concurrency-007AFF.svg?style=flat-square&logo=mysql&logoColor=white" alt="Database">
   <img src="https://img.shields.io/badge/Architecture-Headless_API-34C759.svg?style=flat-square&logo=serverless&logoColor=white" alt="Architecture">
@@ -16,9 +16,9 @@ README.md
 ---
 ## 📖 产品概述
 
-**GuYi Aegis Pro v14.0 Enterprise** 是一套专为独立开发者与中小微企业打造的 **高并发、低延迟** 软件授权分发解决方案。
+**GuYi Aegis Pro v15.0 Enterprise** 是一套专为独立开发者与中小微企业打造的 **高并发、低延迟** 软件授权分发解决方案。
 
-v14.0 版本是一次彻底的架构重构。为了追求极致的性能与轻量化，我们**移除了内置的 Web 端卡密验证页面**，全面转向 **纯 API 驱动 (Headless) 架构**。系统弃用了 SQLite，转而采用高性能的 **MySQL 数据库架构**，配合 **App Key 多租户隔离** 与 **云变量 2.0 引擎**，专注于为桌面软件、APP、插件等客户端提供毫秒级的鉴权服务。
+v15.0 版本是一次彻底的架构重构。为了追求极致的性能与轻量化，我们**移除了内置的 Web 端卡密验证页面**，全面转向 **纯 API 驱动 (Headless) 架构**。系统弃用了 SQLite，转而采用高性能的 **MySQL 数据库架构**，配合 **App Key 多租户隔离** 与 **云变量 2.0 引擎**，专注于为桌面软件、APP、插件等客户端提供毫秒级的鉴权服务。
 
 ---
 
@@ -69,7 +69,7 @@ v14.0 版本是一次彻底的架构重构。为了追求极致的性能与轻�
 
 ## 📂 部署架构与目录
 
-v14.0 采用纯 API 架构与 MySQL 存储，目录结构更加精简。请确保 Web 根目录可写以便安装程序生成配置文件：
+v15.0 采用纯 API 架构与 MySQL 存储，目录结构更加精简。请确保 Web 根目录可写以便安装程序生成配置文件：
 
 ```text
 / (Web Root)
